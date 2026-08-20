@@ -536,7 +536,7 @@ function Cmd.DeleteSelectionOrPreviousChar()
 		if currentDocument._textmark ~= nil then return Cmd.Delete() end
 		local position = currentDocument:previousTextPosition()
 		if not position then return false end
-		currentDocument._textbuffer:delete(position, currentDocument._textpos - position)
+		currentDocument:deleteTextRange(position, currentDocument._textpos - position)
 		currentDocument._textpos = position
 		currentDocument._textchanged = true
 		documentSet:touch()
@@ -575,7 +575,7 @@ function Cmd.DeleteSelectionOrNextChar()
 		if currentDocument._textmark ~= nil then return Cmd.Delete() end
 		local position = currentDocument:nextTextPosition()
 		if not position then return false end
-		currentDocument._textbuffer:delete(currentDocument._textpos, position - currentDocument._textpos)
+		currentDocument:deleteTextRange(currentDocument._textpos, position - currentDocument._textpos)
 		currentDocument._textchanged = true
 		documentSet:touch()
 		QueueRedraw()
@@ -617,7 +617,7 @@ function Cmd.DeleteWord()
 		while start > 0 and not currentDocument._textbuffer:slice(start - 1, 1):match("%s") do
 			start = start - 1
 		end
-		currentDocument._textbuffer:delete(start, finish - start)
+		currentDocument:deleteTextRange(start, finish - start)
 		currentDocument._textpos = start
 		currentDocument._textchanged = true
 		documentSet:touch()
@@ -1289,7 +1289,7 @@ function Cmd.Delete()
 	if currentDocument:usesTextBuffer() then
 		local first, last = currentDocument:textSelection()
 		if not first or first == last then return false end
-		currentDocument._textbuffer:delete(first, last - first)
+		currentDocument:deleteTextRange(first, last - first)
 		currentDocument._textpos = first
 		currentDocument._textchanged = true
 		documentSet:touch()

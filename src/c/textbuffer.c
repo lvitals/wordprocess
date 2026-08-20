@@ -15,10 +15,38 @@
 #ifdef __linux__
 #include <sys/sendfile.h>
 #endif
+#else
+#include <io.h>
 #endif
 
 #define TEXTBUFFER_MT "wordprocess.textbuffer"
 #define MAX_LUA_SLICE (16u * 1024u * 1024u)
+#define MAX_HISTORY_BYTES (64u * 1024u * 1024u)
+
+#ifdef WIN32
+static int push_windows_error(lua_State* L, DWORD code)
+{
+    char* system_message = NULL;
+    char message[1024];
+    DWORD length = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER |
+        FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL, code, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        (char*)&system_message, 0, NULL);
+    while (length && (system_message[length - 1] == '\r' ||
+        system_message[length - 1] == '\n'))
+        system_message[--length] = '\0';
+    if (length)
+        snprintf(message, sizeof(message), "%s (Windows error %lu)",
+            system_message, (unsigned long)code);
+    else
+        snprintf(message, sizeof(message), "Windows error %lu",
+            (unsigned long)code);
+    if (system_message) LocalFree(system_message);
+    lua_pushnil(L);
+    lua_pushstring(L, message);
+    return 2;
+}
+#endif
 
 typedef struct Piece Piece;
 typedef struct Change Change;
@@ -60,6 +88,7 @@ typedef struct
 #ifdef WIN32
     HANDLE file;
     HANDLE map_handle;
+    BY_HANDLE_FILE_INFORMATION source_info;
 #endif
 } TextBuffer;
 
@@ -96,6 +125,16 @@ static void piece_free(Piece* piece)
     if (piece->owned)
         free((void*)piece->data);
     free(piece);
+}
+
+static void pieces_free(Piece* piece)
+{
+    while (piece)
+    {
+        Piece* next = piece->next;
+        piece_free(piece);
+        piece = next;
+    }
 }
 
 static Piece* piece_copy_range(const Piece* source, size_t start, size_t length)
@@ -151,13 +190,7 @@ static void pieces_coalesce(TextBuffer* buffer)
 
 static void close_buffer(TextBuffer* buffer)
 {
-    Piece* piece = buffer->pieces;
-    while (piece)
-    {
-        Piece* next = piece->next;
-        piece_free(piece);
-        piece = next;
-    }
+    pieces_free(buffer->pieces);
     buffer->pieces = NULL;
     changes_free(buffer->undo);
     changes_free(buffer->redo);
@@ -227,6 +260,15 @@ static int buffer_close_cb(lua_State* L)
 static int buffer_size_cb(lua_State* L)
 {
     lua_pushnumber(L, (lua_Number)check_buffer(L, 1)->size);
+    return 1;
+}
+
+static int buffer_piece_count_cb(lua_State* L)
+{
+    TextBuffer* buffer = check_buffer(L, 1);
+    size_t count = 0;
+    for (Piece* piece = buffer->pieces; piece; piece = piece->next) count++;
+    lua_pushnumber(L, (lua_Number)count);
     return 1;
 }
 
@@ -430,6 +472,18 @@ error:
     return NULL;
 }
 
+static Change* change_new_with_removed(size_t position,
+    unsigned char* removed, size_t removed_length)
+{
+    Change* change = (Change*)calloc(1, sizeof(*change));
+    if (!change)
+        return NULL;
+    change->position = position;
+    change->removed = removed;
+    change->removed_length = removed_length;
+    return change;
+}
+
 static void push_change(Change** stack, Change* change)
 {
     change->next = *stack;
@@ -479,11 +533,22 @@ static int buffer_delete_cb(lua_State* L)
     luaL_argcheck(L, length <= buffer->size - start, 3,
         "deletion outside text buffer");
     if (!length) return 0;
+	if (length > MAX_HISTORY_BYTES)
+	{
+		if (!buffer_delete_raw(buffer, start, length))
+			return luaL_error(L, "out of memory deleting from text buffer");
+		changes_free(buffer->undo);
+		changes_free(buffer->redo);
+		buffer->undo = buffer->redo = NULL;
+		buffer->modified = true;
+		lua_pushboolean(L, false);
+		return 1;
+	}
     unsigned char* removed = buffer_copy(buffer, start, length);
-    Change* change = removed ? change_new(start, removed, length, NULL, 0) : NULL;
-    free(removed);
+	Change* change = removed ? change_new_with_removed(start, removed, length) : NULL;
     if (!change || !buffer_delete_raw(buffer, start, length))
     {
+		if (!change) free(removed);
         changes_free(change);
         return luaL_error(L, "out of memory deleting from text buffer");
     }
@@ -492,7 +557,8 @@ static int buffer_delete_cb(lua_State* L)
     push_change(&buffer->undo, change);
     trim_changes(&buffer->undo, 500);
     buffer->modified = true;
-    return 0;
+	lua_pushboolean(L, true);
+	return 1;
 }
 
 static int buffer_find_cb(lua_State* L)
@@ -661,6 +727,100 @@ static int move_history(lua_State* L, bool forward)
 static int buffer_undo_cb(lua_State* L) { return move_history(L, false); }
 static int buffer_redo_cb(lua_State* L) { return move_history(L, true); }
 
+/* After every successful save, make the saved file the sole backing store.
+ * Path, descriptor/handle, mapping and identity must always describe the same
+ * object; otherwise truncating an older Save-As source could SIGBUS us. */
+static bool rebase_after_save(TextBuffer* buffer, const char* filename)
+{
+    const unsigned char* new_mapping = NULL;
+    size_t new_size = 0;
+    Piece* new_piece = NULL;
+#ifdef WIN32
+    HANDLE new_file = CreateFileA(filename, GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE new_map = NULL;
+    if (new_file == INVALID_HANDLE_VALUE)
+        return false;
+    LARGE_INTEGER size;
+    if (!GetFileSizeEx(new_file, &size) || size.QuadPart < 0 ||
+        (uint64_t)size.QuadPart > SIZE_MAX)
+        goto error;
+    new_size = (size_t)size.QuadPart;
+    if (new_size)
+    {
+        new_map = CreateFileMapping(new_file, NULL, PAGE_READONLY, 0, 0, NULL);
+        if (!new_map) goto error;
+        new_mapping = (const unsigned char*)MapViewOfFile(new_map,
+            FILE_MAP_READ, 0, 0, 0);
+        if (!new_mapping) goto error;
+    }
+#else
+    int new_fd = open(filename, O_RDONLY);
+    struct stat st;
+    if (new_fd < 0)
+        return false;
+    if (fstat(new_fd, &st) != 0 || !S_ISREG(st.st_mode) || st.st_size < 0 ||
+        (uintmax_t)st.st_size > SIZE_MAX)
+        goto error;
+    new_size = (size_t)st.st_size;
+    if (new_size)
+    {
+        new_mapping = (const unsigned char*)mmap(NULL, new_size,
+            PROT_READ, MAP_SHARED, new_fd, 0);
+        if (new_mapping == MAP_FAILED)
+        {
+            new_mapping = NULL;
+            goto error;
+        }
+    }
+#endif
+    new_piece = piece_new(new_mapping, new_size, false);
+    if (!new_piece) goto error;
+    char* new_path = (char*)malloc(strlen(filename) + 1);
+    if (!new_path) goto error;
+    memcpy(new_path, filename, strlen(filename) + 1);
+
+    pieces_free(buffer->pieces);
+#ifdef WIN32
+    if (buffer->mapping) UnmapViewOfFile(buffer->mapping);
+    if (buffer->map_handle) CloseHandle(buffer->map_handle);
+    if (buffer->file && buffer->file != INVALID_HANDLE_VALUE) CloseHandle(buffer->file);
+    buffer->file = new_file;
+    buffer->map_handle = new_map;
+    if (!GetFileInformationByHandle(new_file, &buffer->source_info))
+        memset(&buffer->source_info, 0, sizeof(buffer->source_info));
+#else
+    if (buffer->mapping) munmap((void*)buffer->mapping, buffer->mapped_size);
+    if (buffer->source_fd >= 0) close(buffer->source_fd);
+    buffer->source_fd = new_fd;
+    buffer->source_device = st.st_dev;
+    buffer->source_inode = st.st_ino;
+    buffer->source_size = st.st_size;
+    buffer->source_mtime = st.st_mtime;
+#endif
+    free(buffer->source_path);
+    buffer->source_path = new_path;
+    buffer->mapping = new_mapping;
+    buffer->mapped_size = new_size;
+    buffer->size = new_size;
+    buffer->pieces = new_piece;
+    buffer->modified = false;
+    return true;
+
+error:
+    piece_free(new_piece);
+#ifdef WIN32
+    if (new_mapping) UnmapViewOfFile(new_mapping);
+    if (new_map) CloseHandle(new_map);
+    if (new_file != INVALID_HANDLE_VALUE) CloseHandle(new_file);
+#else
+    if (new_mapping) munmap((void*)new_mapping, new_size);
+    close(new_fd);
+#endif
+    return false;
+}
+
 #ifndef WIN32
 static bool write_all(int fd, const unsigned char* data, size_t length)
 {
@@ -723,15 +883,57 @@ static int buffer_save_cb(lua_State* L)
     }
 #endif
     size_t namelen = strlen(filename);
-    char* temporary = (char*)malloc(namelen + 5);
+    char* temporary = (char*)malloc(
+#ifdef WIN32
+        MAX_PATH
+#else
+        namelen + 16
+#endif
+    );
     if (!temporary)
         return luaL_error(L, "out of memory creating save path");
-    memcpy(temporary, filename, namelen);
-    memcpy(temporary + namelen, ".new", 5);
 #ifndef WIN32
-    int output = open(temporary, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    const char* slash = strrchr(filename, '/');
+    if (slash)
+    {
+        size_t directory_length = (size_t)(slash - filename) + 1;
+        memcpy(temporary, filename, directory_length);
+        temporary[directory_length] = '.';
+        strcpy(temporary + directory_length + 1, slash + 1);
+    }
+    else
+    {
+        temporary[0] = '.';
+        strcpy(temporary + 1, filename);
+    }
+    strcat(temporary, ".wp-XXXXXX");
+    struct stat old_metadata;
+    bool had_old_metadata = stat(filename, &old_metadata) == 0;
+    int output = mkstemp(temporary);
+    if (output >= 0 && had_old_metadata)
+    {
+        (void)fchown(output, old_metadata.st_uid, old_metadata.st_gid);
+        (void)fchmod(output, old_metadata.st_mode & 07777);
+    }
     if (output < 0)
 #else
+    if (namelen >= MAX_PATH)
+    {
+        free(temporary);
+        lua_pushnil(L); lua_pushstring(L, "destination path is too long"); return 2;
+    }
+    char directory[MAX_PATH];
+    memcpy(directory, filename, namelen + 1);
+    char* slash = strrchr(directory, '\\');
+    char* forward_slash = strrchr(directory, '/');
+    if (!slash || (forward_slash && forward_slash > slash)) slash = forward_slash;
+    if (slash) *slash = '\0'; else memcpy(directory, ".", 2);
+    if (!GetTempFileNameA(directory[0] ? directory : "\\", "xwp", 0, temporary))
+    {
+        DWORD saved = GetLastError();
+        free(temporary);
+        return push_windows_error(L, saved);
+    }
     FILE* output = fopen(temporary, "wb");
     if (!output)
 #endif
@@ -740,6 +942,9 @@ static int buffer_save_cb(lua_State* L)
         lua_pushnil(L); lua_pushstring(L, strerror(errno)); return 2;
     }
     bool ok = true;
+#ifdef WIN32
+    DWORD windows_error = ERROR_SUCCESS;
+#endif
     size_t remaining = buffer->size;
     for (Piece* piece = buffer->pieces; piece && ok; piece = piece->next)
     {
@@ -765,6 +970,11 @@ static int buffer_save_cb(lua_State* L)
 #else
     if (fflush(output) != 0)
         ok = false;
+    if (ok && !FlushFileBuffers((HANDLE)_get_osfhandle(_fileno(output))))
+    {
+        windows_error = GetLastError();
+        ok = false;
+    }
     if (fclose(output) != 0)
         ok = false;
 #endif
@@ -773,38 +983,67 @@ static int buffer_save_cb(lua_State* L)
         int saved = errno;
         remove(temporary);
         free(temporary);
+#ifdef WIN32
+        if (windows_error != ERROR_SUCCESS)
+            return push_windows_error(L, windows_error);
+#endif
         errno = saved;
         lua_pushnil(L); lua_pushstring(L, strerror(errno)); return 2;
     }
 #ifdef WIN32
-    remove(filename);
-#endif
+    DWORD destination_attributes = GetFileAttributesA(filename);
+    bool replaced = destination_attributes != INVALID_FILE_ATTRIBUTES
+        ? ReplaceFileA(filename, temporary, NULL, REPLACEFILE_WRITE_THROUGH,
+            NULL, NULL) != 0
+        : MoveFileExA(temporary, filename,
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+    if (!replaced)
+#else
     if (rename(temporary, filename) != 0)
+#endif
     {
+#ifdef WIN32
+        DWORD saved = GetLastError();
+        free(temporary);
+        return push_windows_error(L, saved);
+#else
         free(temporary);
         lua_pushnil(L); lua_pushstring(L, strerror(errno)); return 2;
+#endif
     }
     free(temporary);
-    if (!buffer->source_path || strcmp(buffer->source_path, filename) != 0)
-    {
-        char* path = (char*)realloc(buffer->source_path, strlen(filename) + 1);
-        if (path)
-        {
-            buffer->source_path = path;
-            memcpy(buffer->source_path, filename, strlen(filename) + 1);
-        }
-    }
 #ifndef WIN32
-    struct stat st;
-    if (stat(filename, &st) == 0)
+    char* directory = (char*)malloc(namelen + 1);
+    if (directory)
     {
-        buffer->source_device = st.st_dev;
-        buffer->source_inode = st.st_ino;
-        buffer->source_size = st.st_size;
-        buffer->source_mtime = st.st_mtime;
+        memcpy(directory, filename, namelen + 1);
+        char* slash = strrchr(directory, '/');
+        if (slash) *slash = '\0'; else memcpy(directory, ".", 2);
+#ifdef O_DIRECTORY
+        int directory_fd = open(directory[0] ? directory : "/",
+            O_RDONLY | O_DIRECTORY);
+#else
+        int directory_fd = open(directory[0] ? directory : "/", O_RDONLY);
+#endif
+        if (directory_fd >= 0)
+        {
+            (void)fsync(directory_fd);
+            close(directory_fd);
+        }
+        free(directory);
     }
 #endif
-    buffer->modified = false;
+    if (!rebase_after_save(buffer, filename))
+    {
+#ifdef WIN32
+        DWORD saved = GetLastError();
+        if (saved != ERROR_SUCCESS)
+            return push_windows_error(L, saved);
+#endif
+        lua_pushnil(L);
+        lua_pushstring(L, "file was saved but could not be remapped safely");
+        return 2;
+    }
     lua_pushboolean(L, true);
     return 1;
 }
@@ -813,7 +1052,22 @@ static int buffer_source_changed_cb(lua_State* L)
 {
     TextBuffer* buffer = check_buffer(L, 1);
     bool changed = false;
-#ifndef WIN32
+#ifdef WIN32
+    HANDLE path_file = buffer->source_path ? CreateFileA(buffer->source_path,
+        GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL) : INVALID_HANDLE_VALUE;
+    BY_HANDLE_FILE_INFORMATION path;
+    changed = path_file == INVALID_HANDLE_VALUE ||
+        !GetFileInformationByHandle(path_file, &path) ||
+        buffer->source_info.dwVolumeSerialNumber != path.dwVolumeSerialNumber ||
+        buffer->source_info.nFileIndexHigh != path.nFileIndexHigh ||
+        buffer->source_info.nFileIndexLow != path.nFileIndexLow ||
+        buffer->source_info.nFileSizeHigh != path.nFileSizeHigh ||
+        buffer->source_info.nFileSizeLow != path.nFileSizeLow ||
+        CompareFileTime(&buffer->source_info.ftLastWriteTime,
+            &path.ftLastWriteTime) != 0;
+    if (path_file != INVALID_HANDLE_VALUE) CloseHandle(path_file);
+#else
     struct stat st;
     changed = !buffer->source_path || stat(buffer->source_path, &st) != 0 ||
         st.st_dev != buffer->source_device || st.st_ino != buffer->source_inode ||
@@ -827,7 +1081,12 @@ static int buffer_source_safe_cb(lua_State* L)
 {
     TextBuffer* buffer = check_buffer(L, 1);
     bool safe = true;
-#ifndef WIN32
+#ifdef WIN32
+    LARGE_INTEGER size;
+    safe = buffer->file && buffer->file != INVALID_HANDLE_VALUE &&
+        GetFileSizeEx(buffer->file, &size) && size.QuadPart >= 0 &&
+        (uint64_t)size.QuadPart >= buffer->mapped_size;
+#else
     struct stat st;
     safe = buffer->source_fd >= 0 && fstat(buffer->source_fd, &st) == 0 &&
         (uintmax_t)st.st_size >= buffer->mapped_size;
@@ -849,7 +1108,8 @@ static int buffer_open_cb(lua_State* L)
         goto error;
     memcpy(buffer->source_path, filename, strlen(filename) + 1);
 #ifdef WIN32
-    buffer->file = CreateFileA(filename, GENERIC_READ, FILE_SHARE_READ, NULL,
+    buffer->file = CreateFileA(filename, GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
         OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (buffer->file == INVALID_HANDLE_VALUE)
         goto error;
@@ -864,6 +1124,8 @@ static int buffer_open_cb(lua_State* L)
     buffer->mapping = (const unsigned char*)MapViewOfFile(buffer->map_handle,
         FILE_MAP_READ, 0, 0, 0);
     if (!buffer->mapping)
+        goto error;
+    if (!GetFileInformationByHandle(buffer->file, &buffer->source_info))
         goto error;
 #else
     buffer->source_fd = open(filename, O_RDONLY);
@@ -897,18 +1159,29 @@ static int buffer_open_cb(lua_State* L)
     lua_setmetatable(L, -2);
     return 1;
 error:
+#ifdef WIN32
+    DWORD saved_error = GetLastError();
+#else
+    int saved_error = errno;
+#endif
     close_buffer(buffer);
     lua_pop(L, 1);
+#ifdef WIN32
+    return push_windows_error(L, saved_error);
+#else
+    errno = saved_error;
     lua_pushnil(L);
     lua_pushstring(L, strerror(errno));
     lua_pushinteger(L, errno);
     return 3;
+#endif
 }
 
 void textbuffer_init(void)
 {
     static const luaL_Reg methods[] = {
         {"close", buffer_close_cb}, {"size", buffer_size_cb},
+        {"piececount", buffer_piece_count_cb},
         {"slice", buffer_slice_cb}, {"find", buffer_find_cb},
         {"findstring", buffer_findstring_cb},
         {"rfind", buffer_rfind_cb},

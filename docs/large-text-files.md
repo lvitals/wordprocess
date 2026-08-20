@@ -31,11 +31,24 @@ the complete logical file. Linux transfers unchanged mapped pieces directly
 between file descriptors inside the kernel; BSD and other Unix systems use the
 portable sequential `write(2)` fallback.
 
+Successful Save and Save As operations reopen and remap the saved destination,
+so the monitored path, descriptor/handle, file identity and mapping always
+refer to the same backing file. POSIX saves use an exclusive hidden temporary
+in the destination directory, preserve mode/owner when permitted, fsync the
+file and parent directory, and rename it. Windows uses replace/write-through
+APIs and opens mappings with delete sharing so replacement is possible.
+
 Mapped documents remain plain text. Paragraph/character styles and structured
 exporters are refused with an explanation; they never silently materialise a
 multi-gigabyte document. Clipboard selections are limited to 16 MiB because
 system clipboards require an in-memory payload. Plain-text save/export has no
 such limit.
+
+Undo payload is bounded independently of the 500-revision count. Deletions up
+to 64 MiB retain undo data with a single copy. Larger deletions remain allowed
+but clear the undo/redo history and display a warning instead of allocating
+multiple gigabytes. A future backing-store-referenced history can restore undo
+for such unusually large single operations without sacrificing bounded RAM.
 
 The automatic threshold can be changed in `~/.wordprocess/startup.lua`:
 
@@ -61,6 +74,13 @@ the source itself as the benchmark output.
 
 ```sh
 wp --lua scripts/benchmark-large-text.lua FILE /tmp/large-output.txt
+```
+
+An optional third argument runs the random-edit benchmark and reports piece
+count plus median and p99 insertion/deletion latency:
+
+```sh
+wp --lua scripts/benchmark-large-text.lua FILE '' 100000
 ```
 
 “Mapped-file initialization” measures `open`/`fstat`/`mmap`, not throughput for

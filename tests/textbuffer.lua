@@ -72,6 +72,21 @@ AssertEquals(true, ShowLargeTextSaveMessage(source))
 AssertEquals("Saving...", savingMessage)
 ImmediateMessage = oldImmediateMessage
 
+-- The non-undoable large-deletion warning is deferred until the command has
+-- finished, so it remains the final visible message instead of being replaced
+-- by the command's ordinary deletion confirmation.
+local oldNonmodalMessage = NonmodalMessage
+local deletionMessages = {}
+NonmodalMessage = function(message)
+	deletionMessages[#deletionMessages+1] = message
+end
+NonmodalMessage("Selected text deleted.")
+FireAsyncEvent("LargeTextUndoHistoryCleared")
+FlushAsyncEvents()
+AssertEquals("Large deletion completed; undo history was cleared.",
+	deletionMessages[#deletionMessages])
+NonmodalMessage = oldNonmodalMessage
+
 AssertEquals(true, document:moveTextLine(1))
 AssertEquals(6, document._textpos)
 AssertEquals(2, document._textline)
@@ -179,6 +194,15 @@ currentDocument = recoverDocument
 AssertEquals(true, Cmd.SaveCurrentDocumentAs(recovered))
 AssertEquals("editor view\n", wg.readfile(recovered))
 AssertEquals("external view\n", wg.readfile(recoverSource))
+-- The successful Save As must have rebased every backing-store identity onto
+-- recovered. Truncating the old A path must therefore be harmless and must not
+-- affect source-change monitoring or subsequent mapped reads.
+local _, truncateOldError = wg.writefile(recoverSource, "")
+AssertEquals(nil, truncateOldError)
+AssertEquals(false, recoverDocument._textbuffer:sourcechanged())
+AssertEquals(true, recoverDocument._textbuffer:sourcesafe())
+AssertEquals("editor view\n", recoverDocument._textbuffer:slice(0,
+	recoverDocument._textbuffer:size()))
 
 local edgeSource = dir.."/edges.txt"
 local edgeData = "one\r\ntwo\n"..string.rep("x", 1024 * 1024).."\nlast"..

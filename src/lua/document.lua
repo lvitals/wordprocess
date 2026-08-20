@@ -164,6 +164,21 @@ function Document.textSelection(self)
 		math.max(self._textmark, self._textpos)
 end
 
+function Document.deleteTextRange(self, start, length)
+	local undoable = self._textbuffer:delete(start, length)
+	if undoable == false then
+		-- Deliver after the command finishes, so follow-up messages such as
+		-- "Selected text deleted" cannot replace this safety warning.
+		FireAsyncEvent("LargeTextUndoHistoryCleared")
+	end
+	return undoable
+end
+
+AddEventListener("LargeTextUndoHistoryCleared", function()
+	NonmodalMessage("Large deletion completed; undo history was cleared.")
+	QueueRedraw()
+end)
+
 function CreateTextBufferDocument(filename)
 	local buffer, e = wg.opentextbuffer(filename)
 	if not buffer then return nil, e end
