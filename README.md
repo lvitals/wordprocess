@@ -19,8 +19,7 @@ meson compile -C builddir
 meson test -C builddir
 ```
 
-The default application version is `1.0`. Distributors can set the version
-shown by the program and generated manual pages without editing source files:
+Distributors can set the version shown by the program and generated manual pages without editing source files:
 
 ```sh
 meson setup builddir -Dapp_version=1.0.1
@@ -63,8 +62,7 @@ Markdown, HTML, OpenDocument, LaTeX, troff, and Org mode.
 
 WordProcess is a fork of WordGrinder. We thank David Given for creating and
 maintaining the original project and for making that work available under the
-MIT license. WordProcess is maintained as an independent project and does not
-use the former project's website or release history.
+MIT license.
 
 ## Copyright and license
 
