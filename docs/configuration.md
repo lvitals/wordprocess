@@ -11,6 +11,10 @@
 | `~/.wordprocess/templates/` | User templates and optional `default.wp` |
 | `~/.wordprocess/user.dictionary` | User spelling dictionary, when enabled |
 
+`startup.lua` can also define machine-wide keyboard overrides. See
+[Keyboard shortcuts](keyboard-shortcuts.md#machine-wide-overrides-with-lua) for
+the precedence rules, key notation, and examples.
+
 On Windows the configuration directory is beside the executable. `--config`
 selects another startup Lua file for one invocation; it does not relocate
 `settings.dat`.
@@ -59,4 +63,3 @@ name. Look for configured autosave files if the primary file is unavailable.
 A failed native save may leave `FILE.wp.new`; it contains the newly written
 candidate if replacement could not complete. Do not overwrite recovery copies
 until a known-good document has been opened and verified.
-

@@ -107,6 +107,80 @@ function ModalMessage(title, message)
 	QueueRedraw()
 end
 
+function Cmd.ShowKeyboardHelp()
+	local rows = {
+		{label="NAVIGATION MODE  (Alt-N toggles; Esc then N also enters)"},
+	}
+	local display = {H="H", J="J", K="K", L="L", B="B", W="W",
+		LEFTBRACKET="[", RIGHTBRACKET="]", A="A", E="E", U="U", D="D",
+		T="T", G="G", X="X", SHIFT_X="Shift-X", SHIFT_D="Shift-D",
+		QUESTION="?"}
+	for _, entry in ipairs(GetNavigationModeBindings()) do
+		rows[#rows+1] = {label=string.format("%-18s %s", display[entry.key],
+			GetMenuActionLabel(entry.binding))}
+	end
+	rows[#rows+1] = {label="I / Escape         Return to writing mode"}
+	rows[#rows+1] = {label="Alt-H             Open this help"}
+	rows[#rows+1] = {label="Alt-N             Enter / leave navigation mode"}
+	rows[#rows+1] = {label=""}
+	rows[#rows+1] = {label="OPTIONAL DIRECT SHORTCUTS (active key map)"}
+	for _, entry in ipairs(GetCommandLayerBindings()) do
+		local direct = ({H="A^H", J="A^J", K="A^K", L="A^L", B="A^B", W="A^W",
+			LEFTBRACKET="A^I", RIGHTBRACKET="A^O",
+			A="A^A", E="A^E", U="A^U", D="A^D", T="A^T", G="A^G", X="A^X",
+			SHIFT_X="AS^X", SHIFT_D="AS^D"})[entry.key]
+		if direct then
+			local shown = ({LEFTBRACKET="I", RIGHTBRACKET="O"})[entry.key] or display[entry.key]
+			rows[#rows+1] = {label=string.format("%-18s %s", "Ctrl-Alt-"..shown,
+				GetShortcutActionLabel(direct))}
+		end
+	end
+
+	rows[#rows+1] = {label=""}
+	rows[#rows+1] = {label="ACTIVE STANDARD SHORTCUTS"}
+	local standard = {
+		{"Left", "LEFT"}, {"Right", "RIGHT"}, {"Up", "UP"}, {"Down", "DOWN"},
+		{"Ctrl-Left", "^LEFT"}, {"Ctrl-Right", "^RIGHT"},
+		{"Ctrl-Up", "^UP"}, {"Ctrl-Down", "^DOWN"},
+		{"Home", "HOME"}, {"End", "END"},
+		{"Ctrl-Home", "^HOME"}, {"Ctrl-End", "^END"},
+		{"Page Up", "PGUP"}, {"Page Down", "PGDN"},
+		{"Backspace", "BACKSPACE"}, {"Delete", "DELETE"},
+		{"Ctrl-S", "^S"}, {"Ctrl-O", "^O"}, {"Ctrl-Q", "^Q"},
+		{"Ctrl-X", "^X"}, {"Ctrl-C", "^C"}, {"Ctrl-V", "^V"},
+		{"Ctrl-Z", "^Z"}, {"Ctrl-Y", "^Y"},
+		{"Ctrl-F", "^F"}, {"Ctrl-K", "^K"}, {"Ctrl-R", "^R"},
+		{"Ctrl-G", "^G"}, {"Ctrl-E", "^E"}, {"Ctrl-W", "^W"},
+		{"Ctrl-B", "^B"}, {"Ctrl-I", "^I"}, {"Ctrl-U", "^U"},
+		{"Ctrl-N", "^N"}, {"Ctrl-P", "^P"}, {"Ctrl-@", "^@"},
+	}
+	for _, entry in ipairs(standard) do
+		rows[#rows+1] = {label=string.format("%-18s %s",
+			entry[1], GetShortcutActionLabel(entry[2]))}
+	end
+	local browser = Form.Browser {
+		focusable = true, type = Form.Browser,
+		x1 = 1, y1 = 1, x2 = -1, y2 = -1,
+		data = rows, cursor = 1,
+	}
+	local function browse_as(key)
+		return function()
+			return browser[key](browser, key)
+		end
+	end
+	Form.Run({
+		title = "Keyboard shortcuts", width = "large", height = "large",
+		actions = { ["q"] = "cancel", ["Q"] = "cancel",
+			["j"] = browse_as("KEY_DOWN"), ["J"] = browse_as("KEY_DOWN"),
+			["k"] = browse_as("KEY_UP"), ["K"] = browse_as("KEY_UP"),
+			["h"] = browse_as("KEY_PGUP"), ["H"] = browse_as("KEY_PGUP"),
+			["l"] = browse_as("KEY_PGDN"), ["L"] = browse_as("KEY_PGDN"),
+			["KEY_RETURN"] = "cancel" },
+		widgets = { browser },
+	}, RedrawScreen, "J/K lines; H/L pages; Esc, Q, or Enter closes")
+	QueueRedraw()
+end
+
 function PromptForYesNo(title, message)
 	local result = nil
 

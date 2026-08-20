@@ -181,6 +181,9 @@ enum
     KEY_RESIZE = 6 << 24,
     KEY_TIMEOUT = 7 << 24,
     KEY_QUIT = 8 << 24,
+    /* Alt-; opens the compact-keyboard command layer. */
+    KEY_COMMAND = 9 << 24,
+    KEYM_ALTCHAR = 10 << 24,
 };
 
 typedef struct

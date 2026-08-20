@@ -108,6 +108,13 @@ static void key_cb(
             ascii = toupper(name[0]);
     }
 
+    if ((mods & GLFW_MOD_CONTROL) && (mods & GLFW_MOD_ALT) && ascii &&
+        strchr("HJKLBWIOAEUDTGX", ascii))
+    {
+        int shifted = (mods & GLFW_MOD_SHIFT) ? VKM_SHIFT : 0;
+        keyboardQueue_push(-(KEYM_ALTCHAR | VKM_CTRL | shifted | ascii));
+        return;
+    }
     if (mods & GLFW_MOD_CONTROL)
     {
         if (ascii)
@@ -158,6 +165,11 @@ static void key_cb(
         }
         if (ascii)
         {
+            if ((ascii == 'H') || (ascii == 'N'))
+            {
+                keyboardQueue_push(-(KEYM_ALTCHAR | ascii));
+                return;
+            }
             keyboardQueue_push(-GLFW_KEY_ESCAPE);
             keyboardQueue_push(ascii);
             return;
@@ -524,6 +536,14 @@ uni_t dpy_getchar(double timeout)
 const char* dpy_getkeyname(uni_t k)
 {
     static char buffer[32];
+    int encoded = -k;
+    if ((encoded & 0xff000000) == KEYM_ALTCHAR)
+    {
+        sprintf(buffer, "KEY_A%s%s%c",
+            (encoded & VKM_SHIFT) ? "S" : "",
+            (encoded & VKM_CTRL) ? "^" : "", encoded & 0xff);
+        return buffer;
+    }
     switch (-k)
     {
         case KEY_RESIZE:
@@ -538,6 +558,8 @@ const char* dpy_getkeyname(uni_t k)
             return "KEY_SCROLLDOWN";
         case KEY_MENU:
             return "KEY_MENU";
+        case KEY_COMMAND:
+            return "KEY_COMMAND";
     }
 
     int mods = -k;

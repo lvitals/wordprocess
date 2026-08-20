@@ -386,6 +386,30 @@ uni_t dpy_getchar(double timeout)
         if (c == KEY_MOUSE)
             return -handle_mouse();
 
+        /* Terminals encode Ctrl-Alt-letter as Escape followed by a control
+         * character. Other Escape-prefixed input keeps its menu behaviour. */
+        if ((r != KEY_CODE_YES) && (c == 27))
+        {
+            timeout(ESCDELAY);
+            wint_t next;
+            int nr = get_wch(&next);
+            if ((nr != ERR) && (nr != KEY_CODE_YES))
+            {
+                if ((next == 'h') || (next == 'H') ||
+                    (next == 'n') || (next == 'N'))
+                    return -(KEYM_ALTCHAR | towupper(next));
+                /* Alt plus a control character is Ctrl-Alt-letter. */
+                if ((next >= 1) && (next <= 26) &&
+                    strchr("HJKLBWIOAEUDTGX", next + 'A' - 1))
+                {
+                    return -(KEYM_ALTCHAR | (1 << 17) | (next + 'A' - 1));
+                }
+            }
+            if (nr != ERR)
+                unget_wch(next);
+            return -27;
+        }
+
         if ((r == KEY_CODE_YES) || !iswprint(c)) /* function key */
             return -c;
 
@@ -442,6 +466,14 @@ static const char* ncurses_suffix_to_name(int suffix)
 const char* dpy_getkeyname(uni_t k)
 {
     k = -k;
+	static char altbuffer[32];
+	if ((k & 0xff000000) == KEYM_ALTCHAR)
+	{
+		snprintf(altbuffer, sizeof(altbuffer), "KEY_A%s%s%c",
+			(k & (1 << 16)) ? "S" : "", (k & (1 << 17)) ? "^" : "",
+			k & 0xff);
+		return altbuffer;
+	}
 
     switch (k)
     {
@@ -455,6 +487,8 @@ const char* dpy_getkeyname(uni_t k)
             return "KEY_SCROLLDOWN";
         case KEY_MENU:
             return "KEY_MENU";
+        case KEY_COMMAND:
+            return "KEY_COMMAND";
 
         case KEY_TIMEOUT:
             return "KEY_TIMEOUT";

@@ -280,6 +280,9 @@ local NavigationMenu = CreateMenu("Navigation",
 	E("ZSPGDN", nil, "Selection page down",          "SPGDN",      Cmd.SetMark, Cmd.GotoNextPage),
 	E("ZDPC",   nil, "Delete previous character",    "BACKSPACE",  cp, Cmd.DeleteSelectionOrPreviousChar),
 	E("ZDNC",   nil, "Delete next character",        "DELETE",     cp, Cmd.DeleteSelectionOrNextChar),
+	E("ZPTAB",  nil, "Goto previous tabulation",     nil,          Cmd.MoveWhileSelected, Cmd.GotoPreviousTab),
+	E("ZNTAB",  nil, "Goto next tabulation",         nil,          Cmd.MoveWhileSelected, Cmd.GotoNextTab),
+	E("ZDPARA", nil, "Delete current paragraph",     nil,          cp, Cmd.DeleteCurrentParagraph),
 	E("ZDW",    nil, "Delete word",                  "^E",         cp, Cmd.TypeWhileSelected, Cmd.DeleteWord),
 	E("ZM",     nil, "Toggle mark",                  "^@",         Cmd.ToggleMark),
 })
@@ -291,7 +294,19 @@ local MainMenu = CreateMenu("Main Menu",
 	M("S",  "S", "Style >",          nil,  StyleMenu),
 	M("D",  "D", "Documents >",      nil,  DocumentsMenu),
 	M("Z",  "Z", "Navigation >",     nil,  NavigationMenu),
+	E("ZMODE", "N", "Toggle navigation mode", nil, Cmd.ToggleNavigationMode),
+	E("Hkeys", "H", "Keyboard shortcuts...", nil, Cmd.ShowKeyboardHelp),
 })
+
+function GetMenuActionLabel(id)
+	local item = menu_tab[id]
+	return item and item.label or tostring(id)
+end
+
+function GetShortcutActionLabel(key)
+	local id = CheckOverrideTable(key) or key_tab[key]
+	return id and GetMenuActionLabel(id) or "Unbound"
+end
 
 --- MENU DRIVER CLASS ---
 

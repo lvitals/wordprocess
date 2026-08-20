@@ -1,5 +1,8 @@
 # Editor reference
 
+For the complete default key map, compact-keyboard navigation, and both ways to
+customise bindings, see [Keyboard shortcuts](keyboard-shortcuts.md).
+
 ## Direct keys
 
 | Key | Action |
@@ -93,4 +96,3 @@ and optional debugging information. Narrow windows omit lower-priority terms.
 Both frontends accept mouse selection. Pressing starts a mark, dragging extends
 it, and a click without a drag clears it. The graphical frontend also receives
 window resize and close events.
-

@@ -84,6 +84,30 @@ For non-native input the suffix assigns a name to the imported document.
 The output must not have a document-name suffix.
 .
 .Sh KEY BINDINGS
+.Ss Compact keyboards
+Hold Ctrl-Alt and press a command key. These direct chords do not replace any
+conventional Ctrl shortcut or Alt menu accelerator.
+.Bl -tag -width Shift-X
+.It H , J , K , L
+Move left, down, up, or right.
+.It B , W
+Move to the previous or next word.
+.It I , O
+Move to the previous or next inserted tabulation.
+.It A , E
+Move to the beginning or end of the display line.
+.It U , D
+Move one screen page up or down.
+.It T , G
+Move to the beginning or end of the document.
+.It X , Shift-X
+Delete the next or previous character.
+.It Shift-D
+Delete the current paragraph.
+.It ?
+Open the in-program keyboard reference.
+.El
+.Ss Conventional bindings
 .Bl -tag -width Ctrl-Right
 .It Escape
 Open the menu.
@@ -156,4 +180,3 @@ MIT.
 See
 .Pa licenses/COPYING.WordProcess
 and the bundled third-party notices.
-

@@ -19,6 +19,36 @@ local P = M.P
 local table_concat = table.concat
 local unpack = rawget(_G, "unpack") or table.unpack
 
+NavigationMode = false
+
+function Cmd.EnterNavigationMode()
+	NavigationMode = true
+	Cmd.UnsetMark()
+	NonmodalMessage("NAVIGATION mode: H/J/K/L move; I or ESC returns to writing")
+	QueueRedraw()
+	return true
+end
+
+function Cmd.ExitNavigationMode()
+	NavigationMode = false
+	NonmodalMessage("Writing mode.")
+	QueueRedraw()
+	return true
+end
+
+function Cmd.ToggleNavigationMode()
+	if NavigationMode then
+		return Cmd.ExitNavigationMode()
+	end
+	return Cmd.EnterNavigationMode()
+end
+
+AddEventListener("BuildStatusBar", function(event, token, terms)
+	if NavigationMode then
+		terms[#terms+1] = {priority=1, value="NAVIGATION"}
+	end
+end)
+
 -- Tabs remain editable as ordinary spaces, but carry an invisible sequence
 -- of style transitions so the ruler can distinguish them from spaces typed
 -- by hand. Word parsers already omit style bytes from visible/exported text.
@@ -27,6 +57,36 @@ local TAB_MARKER_WORD = CreateStyleByte(15)..CreateStyleByte(14)..
 
 function WordHasTabMarker(word)
 	return word:find(TAB_MARKER_WORD, 1, true) ~= nil
+end
+
+local function goto_tab(direction)
+	local startp, startw = currentDocument.cp, currentDocument.cw
+	local p, w = startp, startw + direction
+	while p >= 1 and p <= #currentDocument do
+		local paragraph = currentDocument[p]
+		while w >= 1 and w <= #paragraph do
+			if WordHasTabMarker(paragraph[w]) then
+				currentDocument.cp, currentDocument.cw, currentDocument.co = p, w, 1
+				QueueRedraw()
+				return true
+			end
+			w = w + direction
+		end
+		p = p + direction
+		if p >= 1 and p <= #currentDocument then
+			w = direction > 0 and 1 or #currentDocument[p]
+		end
+	end
+	NonmodalMessage(direction > 0 and "No next tab stop." or "No previous tab stop.")
+	return false
+end
+
+function Cmd.GotoPreviousTab()
+	return goto_tab(-1)
+end
+
+function Cmd.GotoNextTab()
+	return goto_tab(1)
 end
 
 function Cmd.GotoBeginningOfWord()
@@ -59,6 +119,24 @@ end
 function Cmd.GotoEndOfDocument()
 	currentDocument.cp = #currentDocument
 	return Cmd.GotoEndOfParagraph()
+end
+
+function Cmd.DeleteCurrentParagraph()
+	local pn = currentDocument.cp
+	local style = currentDocument[pn].style
+	if #currentDocument == 1 then
+		currentDocument[1] = CreateParagraph(style, {""})
+	else
+		currentDocument:deleteParagraphAt(pn)
+		currentDocument.cp = math.min(pn, #currentDocument)
+	end
+	currentDocument.cw = 1
+	currentDocument.co = 1
+	Cmd.UnsetMark()
+	documentSet:touch()
+	QueueRedraw()
+	NonmodalMessage("Paragraph deleted.")
+	return true
 end
 
 function Cmd.GotoPreviousParagraph()
@@ -548,26 +626,52 @@ function Cmd.GotoEndOfLine()
 	return Cmd.GotoXPosition(ScreenWidth)
 end
 
-function Cmd.GotoPreviousPage()
-	if currentDocument._topp and currentDocument._topw then
-		local x, _, _ = getpos()
-		currentDocument.cp = currentDocument._topp
-		currentDocument.cw = currentDocument._topw
-		currentDocument.co = 1
-		return Cmd.GotoXPosition(x)
+local function visible_text_line_count()
+	local topp, topw = currentDocument._topp, currentDocument._topw
+	local botp, botw = currentDocument._botp, currentDocument._botw
+	if not topp or not topw or not botp or not botw then
+		return math.max(1, ScreenHeight - 1)
 	end
-	return false
+
+	local count = 0
+	for pn = topp, botp do
+		local paragraph = currentDocument[pn]
+		local lines = paragraph:wrap().lines
+		local first = 1
+		local last = #lines
+		if pn == topp then
+			first = paragraph:getLineOfWord(topw) or 1
+		end
+		if pn == botp then
+			last = paragraph:getLineOfWord(botw) or #lines
+		end
+		if last >= first then
+			count = count + last - first + 1
+		end
+	end
+	return math.max(1, count)
+end
+
+local function move_page(move_line)
+	local moved = false
+	-- Move by the number of editable text lines currently visible. Blank
+	-- paragraph-spacing rows are deliberately excluded because the cursor
+	-- cannot land on them.
+	for _ = 1, visible_text_line_count() do
+		if not move_line() then
+			break
+		end
+		moved = true
+	end
+	return moved
+end
+
+function Cmd.GotoPreviousPage()
+	return move_page(Cmd.GotoPreviousLine)
 end
 
 function Cmd.GotoNextPage()
-	if currentDocument._botp and currentDocument._botw then
-		local x, _, _ = getpos()
-		currentDocument.cp = currentDocument._botp
-		currentDocument.cw = currentDocument._botw
-		currentDocument.co = 1
-		return Cmd.GotoXPosition(x)
-	end
-	return false
+	return move_page(Cmd.GotoNextLine)
 end
 
 local style_tab =

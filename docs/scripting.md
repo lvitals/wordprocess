@@ -54,6 +54,13 @@ accelerators. Bindings normally refer to an existing menu action. Key names use
 the editor vocabulary, such as `^S`, `LEFT`, `SLEFT`, `^LEFT`, `PGDN`, and
 `KEY_*` events supplied by the frontend. Invalid bindings raise an error early.
 
+The compact-keyboard layer uses pseudo-key names such as `COMMAND_H`,
+`COMMAND_RIGHTBRACKET`, and `COMMAND_SHIFT_D`. They use the same override API;
+the full list and examples are in
+[Keyboard shortcuts](keyboard-shortcuts.md#machine-wide-overrides-with-lua).
+The in-program help resolves its labels from the active map, so overrides are
+reflected there.
+
 ## Low-level API
 
 The `wg` Lua table is the internal native bridge for screen, Unicode word,
@@ -71,4 +78,3 @@ than `Cmd`, document objects, and the event interface.
 
 Run these from the source tree or install/adapt them as personal scripts. The
 benchmark writes temporary files below `/tmp` and is intended for development.
-

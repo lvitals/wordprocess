@@ -166,6 +166,12 @@ function WordProcessor(filename)
         FireEvent("DocumentLoaded")
     end
 
+    local command_layer = nil
+    local function start_command_layer()
+        command_layer = true
+        NonmodalMessage("Navigation: H/J/K/L move; ? shows all shortcuts")
+    end
+
     local masterkeymap= {
         ["KEY_RESIZE"] = GroupCallback{ResizeScreen, RedrawScreen},
         ["KEY_REDRAW"] = RedrawScreen,
@@ -182,10 +188,60 @@ function WordProcessor(filename)
 			Cmd.InsertTab },
         ["KEY_ESCAPE"] = GroupCallback{ Cmd.ActivateMenu },
         ["KEY_MENU"] = GroupCallback{ Cmd.ActivateMenu },
+        ["KEY_COMMAND"] = start_command_layer,
         ["KEY_QUIT"] = GroupCallback{ Cmd.TerminateProgram },
     }
 
     local function handle_key_event(c)
+        if NavigationMode then
+            if c == "KEY_AH" then
+                Cmd.ShowKeyboardHelp()
+                return
+            elseif c == "KEY_AN" then
+                Cmd.ToggleNavigationMode()
+                return
+            end
+            if c == "KEY_ESCAPE" or c == "i" then
+                Cmd.ExitNavigationMode()
+                return
+            end
+            local names = { ["["]="LEFTBRACKET", ["]"]="RIGHTBRACKET",
+                ["?"]="QUESTION" }
+            local name = names[c]
+            if not name and not c:match("^KEY_") then
+                name = c:match("^[A-Z]$") and ("SHIFT_"..c) or c:upper()
+            end
+            local command = name and documentSet.menu:lookupAccelerator(
+                "KEY_NAV_"..name)
+            if command then
+                command()
+                return
+            end
+            -- Modified shortcuts retain their normal meanings while the
+            -- modeless editor is temporarily in navigation mode.
+            if not c:match("^KEY_") then
+                NonmodalMessage("NAVIGATION mode: unknown key '"..c.."'; I or ESC exits")
+                return
+            end
+        end
+        if command_layer then
+            command_layer = nil
+            local key = c:gsub("^KEY_", "")
+            local names = { ["["] = "LEFTBRACKET", ["]"] = "RIGHTBRACKET",
+                ["?"] = "QUESTION" }
+            local name = names[key]
+            if not name then
+                name = key:match("^[A-Z]$") and ("SHIFT_"..key) or key:upper()
+            end
+            local command = documentSet.menu:lookupAccelerator(
+                "KEY_COMMAND_"..name)
+            if command then
+                command()
+            elseif key ~= "ESCAPE" then
+                NonmodalMessage("Unknown navigation command '"..key.."'; use Alt-; ? for help")
+            end
+            return
+        end
         -- Anything in masterkeymap overrides everything else.
         local f = masterkeymap[c]
         if f then

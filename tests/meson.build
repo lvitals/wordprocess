@@ -5,6 +5,7 @@
 # TEST_BINARY at the ncurses build on non-Windows).
 wordprocess_tests = [
   'apply-markup', 'argument-parser', 'change-paragraph-style', 'clipboard',
+  'compact-keyboard-navigation',
   'delete-selection', 'escape-strings', 'export-to-html', 'export-to-latex',
   'export-to-markdown', 'export-to-opendocument', 'export-to-org',
   'export-to-text', 'export-to-troff', 'filesystem', 'find-and-replace',
@@ -17,7 +18,7 @@ wordprocess_tests = [
   'load-compatibility-05', 'load-compatibility-06', 'load-compatibility-07', 'load-compatibility-08', 'load-compatibility-10-crlf',
   'load-compatibility-09', 'load-failed', 'lowlevelclipboard', 'margin-mode-persistence',
   'move-while-selected',
-  'numbered-lists', 'page-layout', 'parse-string-into-words', 'save-format-escaped-strings',
+  'numbered-lists', 'page-layout', 'page-navigation', 'parse-string-into-words', 'save-format-escaped-strings',
   'scrollbar', 'simple-editing', 'smartquotes-selection', 'smartquotes-typing',
   'spellchecker', 'tab-insertion', 'tableio', 'type-while-selected', 'undo', 'utf8', 'utils',
   'weirdness-cannot-save-settings', 'weirdness-combining-words',
