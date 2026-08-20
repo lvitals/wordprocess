@@ -39,6 +39,21 @@ AssertEquals(1, buffer:findstring("lXYZp", 0))
 AssertEquals(nil, buffer:findstring("not present", 0))
 AssertEquals(true, buffer:undo())
 
+-- Regression: Enter exactly at EOF creates a right-hand piece. Reverse line
+-- lookup must inspect that piece instead of scanning the whole original mmap.
+local eofDocument = assert(CreateTextBufferDocument(source))
+currentDocument = eofDocument
+AssertEquals(true, Cmd.GotoEndOfDocument())
+local eof = eofDocument._textbuffer:size()
+AssertEquals(true, Cmd.SplitCurrentParagraph())
+AssertEquals(eof + 1, eofDocument._textpos)
+local emptyLineStart = eofDocument:textLineBounds()
+AssertEquals(eof + 1, emptyLineStart)
+AssertEquals(true, Cmd.InsertStringIntoWord("x"))
+local typedLineStart = eofDocument:textLineBounds()
+AssertEquals(eof + 1, typedLineStart)
+AssertEquals("\nx", eofDocument._textbuffer:slice(eof, 2))
+
 local document, documentError = CreateTextBufferDocument(source)
 AssertEquals(nil, documentError)
 currentDocument = document

@@ -503,10 +503,15 @@ local function redrawtextbuffer()
 	local y = min_y
 	local visible_line = document._texttopline
 
-	while y <= max_y and offset < document._textbuffer:size() do
+	local buffersize = document._textbuffer:size()
+	-- A trailing newline creates one real, empty line at EOF. Draw that line
+	-- when it contains the cursor; otherwise cursor_y remains at min_y and the
+	-- visible cursor incorrectly jumps to the top of the window.
+	while y <= max_y and (offset < buffersize or
+			(offset == buffersize and document._textpos == buffersize)) do
 		if offset == line_start then cursor_y = y end
 		local newline = document._textbuffer:find(offset, 10)
-		local finish = newline or document._textbuffer:size()
+		local finish = newline or buffersize
 		if finish > offset and document._textbuffer:slice(finish - 1, 1) == "\r" then
 			finish = finish - 1
 		end
@@ -559,7 +564,7 @@ local function redrawtextbuffer()
 
 		lineindex[y + 1] = {textoffset = offset, textdisplaystart = display_start}
 		if not newline then
-			offset = document._textbuffer:size()
+			offset = buffersize
 			break
 		end
 		offset = newline + 1

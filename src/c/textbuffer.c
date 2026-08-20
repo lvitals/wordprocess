@@ -589,6 +589,16 @@ static int buffer_rfind_cb(lua_State* L)
         Piece* piece = locate(buffer, limit - 1, NULL, &inner);
         if (!piece)
             break;
+		/* locate() deliberately represents an exact boundary as the end of
+		 * the left piece because insertion/deletion need that convention.
+		 * rfind(), however, is locating an actual byte at limit-1, so that
+		 * byte belongs to the right piece. Without this adjustment, an append
+		 * at EOF makes the reverse newline search scan the entire mmap. */
+		if (inner == piece->length && piece->next)
+		{
+			piece = piece->next;
+			inner = 0;
+		}
         size_t piece_start = (limit - 1) - inner;
         size_t lower = start > piece_start ? start - piece_start : 0;
         size_t index = inner + 1;
