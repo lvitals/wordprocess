@@ -167,6 +167,10 @@ local function unconvert_clipboard()
 end
 
 function Cmd.Smartquotify()
+	if currentDocument:usesTextBuffer() then
+		NonmodalMessage("Smartquotify requires conversion to a structured document.")
+		return false
+	end
 	return Cmd.Checkpoint() and
 		Cmd.Copy(true) and
 		convert_clipboard() and
@@ -174,6 +178,10 @@ function Cmd.Smartquotify()
 end
 
 function Cmd.Unsmartquotify()
+	if currentDocument:usesTextBuffer() then
+		NonmodalMessage("Unsmartquotify requires conversion to a structured document.")
+		return false
+	end
 	return Cmd.Checkpoint() and
 		Cmd.Copy(true) and
 		unconvert_clipboard() and

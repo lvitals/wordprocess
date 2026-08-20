@@ -10,6 +10,7 @@ local style = 0
 
 do
 	local function cb(event, token, terms)
+		if currentDocument:usesTextBuffer() then return end
 		local s =
 		{
 			bit32.btest(style, wg.ITALIC) and "I" or ".",
@@ -32,7 +33,9 @@ end
 
 do
 	local function cb(event, token)
-		style = GetStyleToLeftOfCursor()
+		if not currentDocument:usesTextBuffer() then
+			style = GetStyleToLeftOfCursor()
+		end
 	end
 
 	AddEventListener("Moved", cb)
@@ -49,4 +52,3 @@ end
 function GetCurrentStyleHint()
 	return style
 end
-

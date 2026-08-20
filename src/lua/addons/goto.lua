@@ -50,6 +50,33 @@ local function gotobrowser(data, index)
 end
 
 function Cmd.Goto()
+	if currentDocument:usesTextBuffer() then
+		local value = PromptForString("Go to", "Byte offset or percentage (for example 75%):", "")
+		if not value or value == "" then return false end
+		local size = currentDocument._textbuffer:size()
+		local percent = value:match("^%s*(%d+%.?%d*)%%%s*$")
+		local position
+		if percent then
+			position = math.floor(size * math.min(100, tonumber(percent)) / 100)
+		else
+			position = tonumber(value)
+		end
+		if not position or position < 0 or position > size then
+			ModalMessage("Invalid position", "Enter a byte offset from 0 to "..size.." or a percentage.")
+			return false
+		end
+		if position > 0 and position < size then
+			local newline = currentDocument._textbuffer:find(position, 10)
+			position = newline and math.min(size, newline + 1) or size
+		end
+		currentDocument._textpos = position
+		currentDocument._texttop = currentDocument:textLineBounds(position)
+		currentDocument._textline = position == 0 and 1 or nil
+		currentDocument._texttopline = currentDocument._textline
+		Cmd.UnsetMark()
+		QueueRedraw()
+		return true
+	end
 	ImmediateMessage("Scanning document...")
 
 	local data = {}

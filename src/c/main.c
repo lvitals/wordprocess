@@ -50,6 +50,7 @@ int main(int argc, char* argv[])
     word_init();
     utils_init();
     filesystem_init();
+    textbuffer_init();
     zip_init();
     clipboard_init();
     cmark_init();

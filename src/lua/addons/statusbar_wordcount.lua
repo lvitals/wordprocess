@@ -10,6 +10,9 @@ local string_format = string.format
 
 do
 	local function cb(event, token, terms)
+		if currentDocument:usesTextBuffer() then
+			return
+		end
 		terms[#terms+1] =
 			{
 				priority=90,
@@ -20,4 +23,3 @@ do
 
 	AddEventListener("BuildStatusBar", cb)
 end
-

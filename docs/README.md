@@ -16,6 +16,8 @@ version 1.0 and native file format 8.
   paragraph styles, page layouts, templates, autosave, and scrapbook.
 - [Import and export](import-export.md): supported formats, conversion rules,
   fidelity, and batch examples.
+- [Large text files](large-text-files.md): mapped piece-table editing,
+  persistence, limits, configuration, and benchmarking.
 - [Configuration](configuration.md): global and per-document settings, files,
   directories, dictionaries, and frontends.
 - [Scripting](scripting.md): command-line Lua, startup customisation, events,

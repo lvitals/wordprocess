@@ -49,16 +49,25 @@ do
 			settings.lastsaved = os.time()
 		end
 
-		if not documentSet.name then
+		if not documentSet.name and not currentDocument:usesTextBuffer() then
 			ImmediateMessage("Cannot autosave; document set has no name!")
 			return
 		end
 
 		if ((os.time() - settings.lastsaved) > (settings.period * 60)) then
+			if currentDocument:usesTextBuffer() then
+				-- A traditional autosave would create another complete multi-GiB
+				-- file every period. Until a bounded delta journal exists, skip it.
+				NonmodalMessage("Autosave skipped for large text; use Save.")
+				settings.lastsaved = os.time()
+				return
+			end
 			ImmediateMessage("Autosaving...")
 
-			local filename = makefilename(settings.pattern)
-			local r, e = SaveDocumentSetRaw(filename)
+			local filename
+			local r, e
+			filename = makefilename(settings.pattern)
+			r, e = SaveDocumentSetRaw(filename)
 
 			if not r then
 				assert(e)

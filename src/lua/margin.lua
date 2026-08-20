@@ -59,7 +59,14 @@ local paragraph_number_controller=
 				return
 			end
 
-			local nm = int(math.log(math.max(#currentDocument, 1), 10)) + 1
+			local nm
+			if currentDocument:usesTextBuffer() then
+				-- The exact total line count is intentionally not scanned at open.
+				-- Reserve enough room for a useful native line counter anyway.
+				nm = 10
+			else
+				nm = int(math.log(math.max(#currentDocument, 1), 10)) + 1
+			end
 			if nm ~= currentDocument.margin then
 				currentDocument.margin = nm
 				ResizeScreen()
@@ -137,4 +144,3 @@ function Cmd.SetViewMode(mode)
 	QueueRedraw()
 	return true
 end
-

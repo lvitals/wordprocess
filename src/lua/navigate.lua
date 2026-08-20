@@ -90,12 +90,39 @@ function Cmd.GotoNextTab()
 end
 
 function Cmd.GotoBeginningOfWord()
+	if currentDocument:usesTextBuffer() then
+		local position = currentDocument._textpos
+		while position > 0 do
+			local previous = currentDocument:previousTextPosition(position)
+			local character = currentDocument._textbuffer:slice(previous,
+				position - previous)
+			if character:match("%s") then break end
+			position = previous
+		end
+		currentDocument._textpos = position
+		QueueRedraw()
+		return true
+	end
 	currentDocument.co = 1
 	QueueRedraw()
 	return true
 end
 
 function Cmd.GotoEndOfWord()
+	if currentDocument:usesTextBuffer() then
+		local position = currentDocument._textpos
+		local size = currentDocument._textbuffer:size()
+		while position < size do
+			local nextposition = currentDocument:nextTextPosition(position)
+			local character = currentDocument._textbuffer:slice(position,
+				nextposition - position)
+			if character:match("%s") then break end
+			position = nextposition
+		end
+		currentDocument._textpos = position
+		QueueRedraw()
+		return true
+	end
 	currentDocument.co = #currentDocument[currentDocument.cp][currentDocument.cw] + 1
 	QueueRedraw()
 	return true
@@ -112,11 +139,29 @@ function Cmd.GotoEndOfParagraph()
 end
 
 function Cmd.GotoBeginningOfDocument()
+	if currentDocument:usesTextBuffer() then
+		currentDocument._textpos = 0
+		currentDocument._texttop = 0
+		currentDocument._textline = 1
+		currentDocument._texttopline = 1
+		QueueRedraw()
+		return true
+	end
 	currentDocument.cp = 1
 	return Cmd.GotoBeginningOfParagraph()
 end
 
 function Cmd.GotoEndOfDocument()
+	if currentDocument:usesTextBuffer() then
+		local size = currentDocument._textbuffer:size()
+		currentDocument._textpos = size
+		local start = currentDocument:textLineBounds(size)
+		currentDocument._texttop = start
+		currentDocument._textline = nil
+		currentDocument._texttopline = nil
+		QueueRedraw()
+		return true
+	end
 	currentDocument.cp = #currentDocument
 	return Cmd.GotoEndOfParagraph()
 end
@@ -140,6 +185,9 @@ function Cmd.DeleteCurrentParagraph()
 end
 
 function Cmd.GotoPreviousParagraph()
+	if currentDocument:usesTextBuffer() then
+		return currentDocument:moveTextLine(-1)
+	end
 	if (currentDocument.cp == 1) then
 		QueueRedraw()
 		return false
@@ -154,6 +202,9 @@ function Cmd.GotoPreviousParagraph()
 end
 
 function Cmd.GotoNextParagraph()
+	if currentDocument:usesTextBuffer() then
+		return currentDocument:moveTextLine(1)
+	end
 	if (currentDocument.cp == #currentDocument) then
 		QueueRedraw()
 		return false
@@ -176,6 +227,27 @@ function Cmd.GotoNextParagraphW()
 end
 
 function Cmd.GotoPreviousWord()
+	if currentDocument:usesTextBuffer() then
+		local position = currentDocument._textpos
+		local function previousCharacter(p)
+			local previous = currentDocument:previousTextPosition(p)
+			return previous, currentDocument._textbuffer:slice(previous, p - previous)
+		end
+		while position > 0 do
+			local previous, character = previousCharacter(position)
+			if not character:match("%s") then break end
+			position = previous
+		end
+		while position > 0 do
+			local previous, character = previousCharacter(position)
+			if character:match("%s") then break end
+			position = previous
+		end
+		if position == currentDocument._textpos then return false end
+		currentDocument._textpos = position
+		QueueRedraw()
+		return true
+	end
 	if Cmd.GotoPreviousChar() then
 		-- If that worked, we weren't at the beginning of the word.
 		currentDocument.co = 1
@@ -194,6 +266,29 @@ function Cmd.GotoPreviousWord()
 end
 
 function Cmd.GotoNextWord()
+	if currentDocument:usesTextBuffer() then
+		local position = currentDocument._textpos
+		local size = currentDocument._textbuffer:size()
+		local function character(p)
+			local nextposition = currentDocument:nextTextPosition(p)
+			return nextposition,
+				currentDocument._textbuffer:slice(p, nextposition - p)
+		end
+		while position < size do
+			local nextposition, text = character(position)
+			if text:match("%s") then break end
+			position = nextposition
+		end
+		while position < size do
+			local nextposition, text = character(position)
+			if not text:match("%s") then break end
+			position = nextposition
+		end
+		if position == currentDocument._textpos then return false end
+		currentDocument._textpos = position
+		QueueRedraw()
+		return true
+	end
 	local p = currentDocument[currentDocument.cp]
 	if (currentDocument.cw == #p) then
 		currentDocument.co = #(p[currentDocument.cw]) + 1
@@ -249,6 +344,13 @@ function Cmd.GotoNextChar()
 end
 
 function Cmd.GotoPreviousCharW()
+	if currentDocument:usesTextBuffer() then
+		local position = currentDocument:previousTextPosition()
+		if not position then return false end
+		currentDocument._textpos = position
+		QueueRedraw()
+		return true
+	end
 	if not Cmd.GotoPreviousChar() then
 		return Cmd.GotoPreviousWordW() and Cmd.GotoEndOfWord()
 	end
@@ -256,6 +358,13 @@ function Cmd.GotoPreviousCharW()
 end
 
 function Cmd.GotoNextCharW()
+	if currentDocument:usesTextBuffer() then
+		local position = currentDocument:nextTextPosition()
+		if not position then return false end
+		currentDocument._textpos = position
+		QueueRedraw()
+		return true
+	end
 	if not Cmd.GotoNextChar() then
 		return Cmd.GotoNextWordW() and Cmd.GotoBeginningOfWord()
 	end
@@ -263,6 +372,14 @@ function Cmd.GotoNextCharW()
 end
 
 function Cmd.InsertStringIntoWord(c)
+	if currentDocument:usesTextBuffer() then
+		currentDocument._textbuffer:insert(currentDocument._textpos, c)
+		currentDocument._textpos = currentDocument._textpos + #c
+		currentDocument._textchanged = true
+		documentSet:touch()
+		QueueRedraw()
+		return true
+	end
 	local cp, cw, co = currentDocument.cp, currentDocument.cw, currentDocument.co
 	local paragraph = currentDocument[cp]
 	local word = paragraph[cw]
@@ -302,6 +419,9 @@ function Cmd.InsertTab()
 		NonmodalMessage("TAB insertion is disabled in Configure Look and Feel.")
 		return false
 	end
+	if currentDocument:usesTextBuffer() then
+		return Cmd.InsertStringIntoWord(string.rep(" ", GetTabWidth()))
+	end
 
 	for _ = 1, GetTabWidth() do
 		Cmd.SplitCurrentWord()
@@ -313,6 +433,9 @@ function Cmd.InsertTab()
 end
 
 function Cmd.SplitCurrentWord()
+	if currentDocument:usesTextBuffer() then
+		return Cmd.InsertStringIntoWord(" ")
+	end
 	local cp, cw, co = currentDocument.cp, currentDocument.cw, currentDocument.co
 	local styleprime = ""
 	local styleprimelen = 0
@@ -409,6 +532,17 @@ function Cmd.DeletePreviousChar()
 end
 
 function Cmd.DeleteSelectionOrPreviousChar()
+	if currentDocument:usesTextBuffer() then
+		if currentDocument._textmark ~= nil then return Cmd.Delete() end
+		local position = currentDocument:previousTextPosition()
+		if not position then return false end
+		currentDocument._textbuffer:delete(position, currentDocument._textpos - position)
+		currentDocument._textpos = position
+		currentDocument._textchanged = true
+		documentSet:touch()
+		QueueRedraw()
+		return true
+	end
 	if currentDocument.mp then
 		return Cmd.Delete()
 	else
@@ -437,6 +571,16 @@ function Cmd.DeleteNextChar()
 end
 
 function Cmd.DeleteSelectionOrNextChar()
+	if currentDocument:usesTextBuffer() then
+		if currentDocument._textmark ~= nil then return Cmd.Delete() end
+		local position = currentDocument:nextTextPosition()
+		if not position then return false end
+		currentDocument._textbuffer:delete(currentDocument._textpos, position - currentDocument._textpos)
+		currentDocument._textchanged = true
+		documentSet:touch()
+		QueueRedraw()
+		return true
+	end
 	if currentDocument.mp then
 		return Cmd.Delete()
 	else
@@ -463,6 +607,23 @@ function Cmd.DeleteWordLeftOfCursor()
 end
 
 function Cmd.DeleteWord()
+	if currentDocument:usesTextBuffer() then
+		local finish = currentDocument._textpos
+		if finish == 0 then return false end
+		local start = finish
+		while start > 0 and currentDocument._textbuffer:slice(start - 1, 1):match("%s") do
+			start = start - 1
+		end
+		while start > 0 and not currentDocument._textbuffer:slice(start - 1, 1):match("%s") do
+			start = start - 1
+		end
+		currentDocument._textbuffer:delete(start, finish - start)
+		currentDocument._textpos = start
+		currentDocument._textchanged = true
+		documentSet:touch()
+		QueueRedraw()
+		return true
+	end
 	if (currentDocument.co == 1) and (currentDocument.cw == 1) then
 		return Cmd.DeletePreviousChar()
 	end
@@ -480,6 +641,9 @@ function Cmd.DeleteWord()
 end
 
 function Cmd.SplitCurrentParagraph()
+	if currentDocument:usesTextBuffer() then
+		return Cmd.InsertStringIntoWord("\n")
+	end
 	if (currentDocument.co == 1) and (currentDocument.cw == 1) then
 		-- Beginning of paragraph; we're going to create a new, empty paragraph
 		-- so we need to split to make sure there's an empty word for it to
@@ -565,6 +729,15 @@ end
 
 function Cmd.GotoXYPosition(x, y)
 	local r = GetPositionOfLine(y)
+	if currentDocument:usesTextBuffer() then
+		if not r or not r.textoffset then return false end
+		local _, finish = currentDocument:textLineBounds(r.textoffset)
+		local _, position = currentDocument:textViewport(
+			r.textdisplaystart or r.textoffset, finish, 0, math.max(0, x))
+		currentDocument._textpos = position
+		QueueRedraw()
+		return true
+	end
 	if r then
 		currentDocument.cp = r.p
 		currentDocument.cw = r.w
@@ -585,6 +758,9 @@ local function getpos()
 end
 
 function Cmd.GotoNextLine()
+	if currentDocument:usesTextBuffer() then
+		return currentDocument:moveTextLine(1)
+	end
 	local x, ln, lines = getpos()
 
 	if (ln == #lines) then
@@ -602,6 +778,9 @@ function Cmd.GotoNextLine()
 end
 
 function Cmd.GotoPreviousLine()
+	if currentDocument:usesTextBuffer() then
+		return currentDocument:moveTextLine(-1)
+	end
 	local x, ln, lines = getpos()
 
 	if (ln == 1) then
@@ -619,10 +798,21 @@ function Cmd.GotoPreviousLine()
 end
 
 function Cmd.GotoBeginningOfLine()
+	if currentDocument:usesTextBuffer() then
+		currentDocument._textpos = currentDocument:textLineBounds()
+		QueueRedraw()
+		return true
+	end
 	return Cmd.GotoXPosition(0)
 end
 
 function Cmd.GotoEndOfLine()
+	if currentDocument:usesTextBuffer() then
+		local _, finish = currentDocument:textLineBounds()
+		currentDocument._textpos = finish
+		QueueRedraw()
+		return true
+	end
 	return Cmd.GotoXPosition(ScreenWidth)
 end
 
@@ -740,6 +930,10 @@ function Cmd.ApplyStyleToSelection(s)
 end
 
 function Cmd.SetStyle(s)
+	if currentDocument:usesTextBuffer() then
+		NonmodalMessage("Character styles require conversion to a structured document.")
+		return false
+	end
 	if currentDocument.mp then
 		return Cmd.ApplyStyleToSelection(s)
 	end
@@ -805,6 +999,10 @@ function Cmd.TerminateProgram()
 end
 
 function Cmd.ChangeParagraphStyle(style)
+	if currentDocument:usesTextBuffer() then
+		NonmodalMessage("Paragraph styles require conversion to a structured document.")
+		return false
+	end
 	if not documentStyles[style] then
 		ModalMessage("Unknown paragraph style", "Sorry! I don't recognise that style. (This user interface will be improved.)")
 		return false
@@ -839,6 +1037,18 @@ local function rewind_past_style_bytes(p, w, o)
 end
 
 function Cmd.ToggleMark()
+	if currentDocument:usesTextBuffer() then
+		if currentDocument._textmark ~= nil then
+			currentDocument._textmark = nil
+			currentDocument.mp = nil
+		else
+			currentDocument._textmark = currentDocument._textpos
+			currentDocument.mp = 1
+			currentDocument.sticky_selection = true
+		end
+		QueueRedraw()
+		return true
+	end
 	if currentDocument.mp then
 		currentDocument.mp = nil
 		currentDocument.mw = nil
@@ -856,6 +1066,14 @@ function Cmd.ToggleMark()
 end
 
 function Cmd.SetMark()
+	if currentDocument:usesTextBuffer() then
+		if currentDocument._textmark == nil then
+			currentDocument._textmark = currentDocument._textpos
+			currentDocument.mp = 1
+			currentDocument.sticky_selection = false
+		end
+		return true
+	end
 	if not currentDocument.mp then
 		currentDocument.mp = currentDocument.cp
 		currentDocument.mw = currentDocument.cw
@@ -866,6 +1084,13 @@ function Cmd.SetMark()
 end
 
 function Cmd.UnsetMark()
+	if currentDocument:usesTextBuffer() then
+		currentDocument._textmark = nil
+		currentDocument.mp = nil
+		currentDocument.sticky_selection = false
+		QueueRedraw()
+		return true
+	end
 	currentDocument.mp = nil
 	currentDocument.mw = nil
 	currentDocument.mo = nil
@@ -910,6 +1135,19 @@ function Cmd.Cut()
 end
 
 function Cmd.Copy(keepselection)
+	if currentDocument:usesTextBuffer() then
+		local first, last = currentDocument:textSelection()
+		if not first or first == last then return false end
+		local length = last - first
+		if length > 16 * 1024 * 1024 then
+			NonmodalMessage("Selection exceeds the 16 MiB clipboard safety limit.")
+			return false
+		end
+		wg.clipboard_set(currentDocument._textbuffer:slice(first, length), nil)
+		NonmodalMessage(string.format("%d bytes copied to clipboard.", length))
+		if not keepselection then return Cmd.UnsetMark() end
+		return true
+	end
 	if not currentDocument.mp then
 		return false
 	end
@@ -982,6 +1220,12 @@ function Cmd.Copy(keepselection)
 end
 
 function Cmd.Paste()
+	if currentDocument:usesTextBuffer() then
+		local text = wg.clipboard_get()
+		if not text then return false end
+		if currentDocument._textmark ~= nil and not Cmd.Delete() then return false end
+		return Cmd.InsertStringIntoWord(text)
+	end
 	local buffer = GetClipboard()
 	if not buffer then
 		return false
@@ -1042,6 +1286,16 @@ function Cmd.Paste()
 end
 
 function Cmd.Delete()
+	if currentDocument:usesTextBuffer() then
+		local first, last = currentDocument:textSelection()
+		if not first or first == last then return false end
+		currentDocument._textbuffer:delete(first, last - first)
+		currentDocument._textpos = first
+		currentDocument._textchanged = true
+		documentSet:touch()
+		NonmodalMessage("Selected text deleted.")
+		return Cmd.UnsetMark()
+	end
 	if not currentDocument.mp then
 		return false
 	end
@@ -1169,6 +1423,33 @@ function Cmd.FindNext()
 	if not documentSet.findtext then
 		return false
 	end
+	if currentDocument:usesTextBuffer() then
+		local start = currentDocument._textpos
+		if currentDocument._textmark ~= nil then
+			local _, last = currentDocument:textSelection()
+			start = last
+		end
+		local found = currentDocument._textbuffer:findstring(
+			documentSet.findtext, start)
+		if not found and start > 0 then
+			found = currentDocument._textbuffer:findstring(documentSet.findtext, 0)
+		end
+		if not found then
+			Cmd.UnsetMark()
+			NonmodalMessage("Not found.")
+			return false
+		end
+		currentDocument._textmark = found
+		currentDocument.mp = 1
+		currentDocument.sticky_selection = false
+		currentDocument._textpos = found + #documentSet.findtext
+		currentDocument._texttop = currentDocument:textLineBounds(found)
+		currentDocument._textline = nil
+		currentDocument._texttopline = nil
+		NonmodalMessage("Found.")
+		QueueRedraw()
+		return true
+	end
 
 	ImmediateMessage("Searching...")
 
@@ -1271,6 +1552,16 @@ function Cmd.FindNext()
 end
 
 function Cmd.ReplaceThenFind()
+	if currentDocument:usesTextBuffer() then
+		if currentDocument._textmark ~= nil then
+			if not Cmd.Delete() then return false end
+			if documentSet.replacetext and #documentSet.replacetext > 0 then
+				Cmd.InsertStringIntoWord(documentSet.replacetext)
+			end
+			NonmodalMessage("Replaced text.")
+		end
+		return Cmd.FindNext()
+	end
 	if currentDocument.mp then
 		local e = Cmd.Delete() and Cmd.UnsetMark()
 		if not e then

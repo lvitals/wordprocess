@@ -15,6 +15,10 @@
 [Keyboard shortcuts](keyboard-shortcuts.md#machine-wide-overrides-with-lua) for
 the precedence rules, key notation, and examples.
 
+`GlobalSettings.large_file_threshold` selects the native mapped piece-table
+backend for plain-text imports and defaults to 64 MiB. See
+[Large text files](large-text-files.md).
+
 On Windows the configuration directory is beside the executable. `--config`
 selects another startup Lua file for one invocation; it does not relocate
 `settings.dat`.

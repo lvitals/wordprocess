@@ -193,6 +193,12 @@ function WordProcessor(filename)
     }
 
     local function handle_key_event(c)
+		if currentDocument:usesTextBuffer() and
+				currentDocument._textbuffer:sourcechanged() and
+				c ~= "KEY_ESCAPE" and c ~= "KEY_MENU" and c ~= "KEY_QUIT" then
+			NonmodalMessage("Source changed on disk; editing is stopped to protect the document.")
+			return
+		end
         if NavigationMode then
             if c == "KEY_AH" then
                 Cmd.ShowKeyboardHelp()

@@ -63,6 +63,11 @@ end
 -- Commit an undo checkpoint
 
 function Cmd.Checkpoint()
+	if currentDocument:usesTextBuffer() then
+		-- Piece-table revisions will live in the native backend; never create a
+		-- misleading shallow snapshot of only the compatibility paragraph.
+		return true
+	end
 	local undostack= currentDocument._undostack or {}
 	currentDocument._undostack = undostack
 
@@ -83,6 +88,18 @@ end
 -- Undo a change.
 
 function Cmd.Undo()
+	if currentDocument:usesTextBuffer() then
+		local changed, position = currentDocument._textbuffer:undo()
+		if not changed then
+			NonmodalMessage("Nothing left to undo")
+			return false
+		end
+		currentDocument._textpos = position
+		currentDocument._textchanged = true
+		documentSet:touch()
+		QueueRedraw()
+		return true
+	end
 	local undostack = currentDocument._undostack or {}
 	local redostack = currentDocument._redostack or {}
 	if not movechange(undostack, redostack) then
@@ -97,6 +114,18 @@ end
 -- Redo an undone change.
 
 function Cmd.Redo()
+	if currentDocument:usesTextBuffer() then
+		local changed, position = currentDocument._textbuffer:redo()
+		if not changed then
+			NonmodalMessage("Nothing left to redo")
+			return false
+		end
+		currentDocument._textpos = position
+		currentDocument._textchanged = true
+		documentSet:touch()
+		QueueRedraw()
+		return true
+	end
 	local undostack= currentDocument._undostack or {}
 	local redostack= currentDocument._redostack or {}
 	if not movechange(redostack, undostack) then
@@ -106,4 +135,3 @@ function Cmd.Redo()
 	NonmodalMessage("Redone ("..#redostack.." left in redo buffer)")
 	return true
 end
-

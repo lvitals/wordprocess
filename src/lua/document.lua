@@ -49,6 +49,135 @@ function Document.wrap(self, width)
 	self._wrapwidth = width
 end
 
+function Document.usesTextBuffer(self)
+	return self._textbuffer ~= nil
+end
+
+function Document.textLineBounds(self, position)
+	position = position or self._textpos
+	local start = self._textbuffer:rfind(0, 10, position)
+	start = start and (start + 1) or 0
+	local finish = self._textbuffer:find(position, 10)
+	finish = finish or self._textbuffer:size()
+	local contentfinish = finish
+	if contentfinish > start and self._textbuffer:slice(contentfinish - 1, 1) == "\r" then
+		contentfinish = contentfinish - 1
+	end
+	return start, contentfinish, finish
+end
+
+function Document.moveTextLine(self, direction)
+	local start, _, finish = self:textLineBounds()
+	local column = self._textpos - start
+	if direction > 0 then
+		if finish >= self._textbuffer:size() then return false end
+		local nextstart = finish + 1
+		local nextfinish = self._textbuffer:find(nextstart, 10) or self._textbuffer:size()
+		self._textpos = math.min(nextstart + column, nextfinish)
+	else
+		if start == 0 then return false end
+		local previousend = start - 1
+		local previousstart = self._textbuffer:rfind(0, 10, previousend)
+		previousstart = previousstart and (previousstart + 1) or 0
+		self._textpos = math.min(previousstart + column, previousend)
+	end
+	if self._textline then
+		self._textline = self._textline + (direction > 0 and 1 or -1)
+	end
+	local target_start = self:textLineBounds(self._textpos)
+	if target_start < (self._texttop or 0) then
+		self._texttop = target_start
+		self._texttopline = self._textline
+	elseif self._textbottom and target_start >= self._textbottom then
+		local oldtop = self._texttop or 0
+		local newline = self._textbuffer:find(oldtop, 10)
+		self._texttop = newline and (newline + 1) or target_start
+		if self._texttopline then self._texttopline = self._texttopline + 1 end
+	end
+	QueueRedraw()
+	return true
+end
+
+function Document.previousTextPosition(self, position)
+	position = position or self._textpos
+	if position == 0 then return nil end
+	local candidate = position - 1
+	while candidate > 0 do
+		local byte = self._textbuffer:slice(candidate, 1):byte()
+		if byte < 0x80 or byte >= 0xc0 then break end
+		candidate = candidate - 1
+	end
+	return candidate
+end
+
+function Document.nextTextPosition(self, position)
+	position = position or self._textpos
+	local size = self._textbuffer:size()
+	if position >= size then return nil end
+	local byte = self._textbuffer:slice(position, 1):byte()
+	local length = byte < 0x80 and 1 or
+		(byte < 0xe0 and 2 or (byte < 0xf0 and 3 or (byte < 0xf8 and 4 or 1)))
+	return math.min(size, position + length)
+end
+
+function Document.textCellOffset(self, start, finish)
+	local width = 0
+	local position = start
+	while position < finish do
+		local nextposition = self:nextTextPosition(position) or finish
+		nextposition = math.min(nextposition, finish)
+		width = width + GetStringWidth(
+			self._textbuffer:slice(position, nextposition - position))
+		position = nextposition
+	end
+	return width
+end
+
+-- Translate terminal-cell coordinates to byte-safe UTF-8 boundaries. Wide
+-- and combining characters are never split, even by horizontal scrolling.
+function Document.textViewport(self, start, finish, firstcell, cellwidth)
+	local position, cells = start, 0
+	while position < finish and cells < firstcell do
+		local nextposition = self:nextTextPosition(position) or finish
+		local width = GetStringWidth(
+			self._textbuffer:slice(position, nextposition - position))
+		if cells + width > firstcell then break end
+		cells = cells + width
+		position = nextposition
+	end
+	local displaystart = position
+	local used = 0
+	while position < finish do
+		local nextposition = self:nextTextPosition(position) or finish
+		local width = GetStringWidth(
+			self._textbuffer:slice(position, nextposition - position))
+		if used + width > cellwidth then break end
+		used = used + width
+		position = nextposition
+	end
+	return displaystart, position, used
+end
+
+function Document.textSelection(self)
+	if self._textmark == nil then return nil end
+	return math.min(self._textmark, self._textpos),
+		math.max(self._textmark, self._textpos)
+end
+
+function CreateTextBufferDocument(filename)
+	local buffer, e = wg.opentextbuffer(filename)
+	if not buffer then return nil, e end
+	local document = CreateDocument()
+	document._textbuffer = buffer
+	document._textsource = filename
+	document._textpos = 0
+	document._texttop = 0
+	document._textline = 1
+	document._texttopline = 1
+	document._textchanged = false
+	return document
+end
+
 function Document.getMarks(self)
 	if not self.mp then
 		return
@@ -112,6 +241,9 @@ function Document.touch(self)
 end
 
 function Document.renumber(self)
+	if self:usesTextBuffer() then
+		return
+	end
 	local wc = 0
 	local pn = 1
 

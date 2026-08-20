@@ -18,6 +18,10 @@ local function maketimestamp(pattern, name)
 end
 
 function Cmd.CutToScrapbook()
+	if currentDocument:usesTextBuffer() then
+		NonmodalMessage("Scrapbook actions require conversion to a structured document.")
+		return false
+	end
 	if not currentDocument.mp then
 		NonmodalMessage("There's nothing selected.")
 		return false
@@ -30,6 +34,10 @@ function Cmd.CutToScrapbook()
 end
 
 function Cmd.CopyToScrapbook()
+	if currentDocument:usesTextBuffer() then
+		NonmodalMessage("Scrapbook actions require conversion to a structured document.")
+		return false
+	end
 	if not currentDocument.mp then
 		NonmodalMessage("There's nothing selected.")
 		return false
@@ -42,6 +50,10 @@ function Cmd.CopyToScrapbook()
 end
 
 function Cmd.PasteToScrapbook()
+	if currentDocument:usesTextBuffer() then
+		NonmodalMessage("Scrapbook actions require conversion to a structured document.")
+		return false
+	end
 	local buffer = documentSet:getClipboard()
 	if not buffer then
 		NonmodalMessage("There's nothing on the clipboard.")

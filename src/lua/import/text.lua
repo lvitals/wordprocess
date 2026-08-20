@@ -39,5 +39,22 @@ function Cmd.ImportTextString(data)
 end
 
 function Cmd.ImportTextFile(filename)
+	if not filename then
+		filename = FileBrowser("Import Text File", "Import from:", false)
+		if not filename then return false end
+	end
+	local info = wg.stat(filename)
+	local threshold = tonumber(GlobalSettings.large_file_threshold) or
+		(64 * 1024 * 1024)
+	threshold = math.max(1024 * 1024, threshold)
+	if info and info.mode == "file" and info.size >= threshold then
+		ImmediateMessage("Opening large text document...")
+		local document, e = CreateTextBufferDocument(filename)
+		if not document then
+			ModalMessage("Cannot open text document", e or "Unknown error")
+			return false
+		end
+		return AddImportedDocument(filename, document)
+	end
 	return ImportFileWithUI(filename, "Import Text File", Cmd.ImportTextString)
 end

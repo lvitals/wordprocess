@@ -57,6 +57,21 @@ local function callback(writer, document)
 end
 
 function Cmd.ExportTextFile(filename)
+	if currentDocument:usesTextBuffer() then
+		if not filename then
+			filename = FileBrowser("Export Text File", "Export as:", true)
+			if not filename then return false end
+			if not filename:match("%.txt$") then filename = filename..".txt" end
+		end
+		ShowLargeTextSaveMessage(filename)
+		local ok, e = currentDocument._textbuffer:save(filename)
+		if not ok then
+			ModalMessage("Export failed", e or "Unknown error")
+			return false
+		end
+		NonmodalMessage("Text export succeeded.")
+		return true
+	end
 	return ExportFileWithUI(filename, "Export Text File", ".txt",
 		callback)
 end

@@ -159,7 +159,55 @@ function SaveDocumentSetRaw(filename)
 	return SaveToFile(filename, documentSet)
 end
 
+-- Mapped documents are selected only for very large plain-text files. Show a
+-- synchronous centred notice only when save() will really stream an output
+-- file; an unchanged save back to its source is a constant-time no-op.
+function ShowLargeTextSaveMessage(filename)
+	if not currentDocument:usesTextBuffer() then return false end
+	if not currentDocument._textchanged and
+			filename == currentDocument._textsource then
+		return false
+	end
+	ImmediateMessage("Saving...")
+	return true
+end
+
 function Cmd.SaveCurrentDocumentAs(filename)
+	if currentDocument:usesTextBuffer() then
+		if not filename then
+			filename = FileBrowser("Save Text Document As", "Save as:", true,
+				currentDocument._textsource)
+			if not filename then return false end
+		end
+		if currentDocument._textbuffer:sourcechanged() then
+			if filename == currentDocument._textsource then
+				ModalMessage("Source file changed",
+					"Saving over the source was stopped because it changed on disk. "..
+					"Use Save As to preserve this editor view in another file.")
+				return false
+			end
+			if not currentDocument._textbuffer:sourcesafe() then
+				ModalMessage("Source file unavailable",
+					"The mapped source was truncated, so it is unsafe to read. "..
+					"Save As cannot recover bytes which are no longer mapped.")
+				return false
+			end
+			ModalMessage("Source file changed",
+				"The original path changed on disk. Save As will preserve the "..
+				"version currently open in the editor without overwriting it.")
+		end
+		ShowLargeTextSaveMessage(filename)
+		local ok, e = currentDocument._textbuffer:save(filename)
+		if not ok then
+			ModalMessage("Cannot save text document", e or "Unknown error")
+			return false
+		end
+		currentDocument._textsource = filename
+		currentDocument._textchanged = false
+		documentSet:clean()
+		NonmodalMessage("Text document saved.")
+		return true
+	end
 	if not filename then
 		filename = FileBrowser("Save Document Set", "Save as:", true)
 		if not filename then
@@ -186,6 +234,9 @@ function Cmd.SaveCurrentDocumentAs(filename)
 end
 
 function Cmd.SaveCurrentDocument()
+	if currentDocument:usesTextBuffer() then
+		return Cmd.SaveCurrentDocumentAs(currentDocument._textsource)
+	end
 	local name= documentSet.name
 	if not name then
 		name = FileBrowser("Save Document Set", "Save as:", true)

@@ -106,6 +106,10 @@ function ImportFileWithUI(filename, title, callback)
 	end
 	assert(document)
 
+	return AddImportedDocument(filename, document)
+end
+
+function AddImportedDocument(filename, document)
 	-- Add the document to the document set.
 
 	local docname = Leafname(filename)

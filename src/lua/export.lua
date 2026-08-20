@@ -144,6 +144,11 @@ end
 -- exportcb(writer, document) to actually do the work.
 
 function ExportFileWithUI(filename, title, extension, callback)
+	if currentDocument:usesTextBuffer() then
+		ModalMessage("Export unavailable",
+			"Large mapped text can currently be exported only as plain text.")
+		return false
+	end
 	if not filename then
 		filename = currentDocument.name
 		if filename then
@@ -192,6 +197,9 @@ end
 --- Converts a document into a local string.
 
 function ExportToString(document, callback)
+	if document:usesTextBuffer() then
+		error("refusing to materialise a mapped text document as one Lua string")
+	end
 	local ss = {}
 	local writer = function(...)
 		for _, s in ipairs({...}) do
@@ -203,4 +211,3 @@ function ExportToString(document, callback)
 
 	return table.concat(ss)
 end
-

@@ -175,6 +175,10 @@ end
 -- Add the current word to the user dictionary.
 
 function Cmd.AddToUserDictionary()
+	if currentDocument:usesTextBuffer() then
+		NonmodalMessage("Spellchecking mapped text is not available yet.")
+		return false
+	end
 	local word = GetWordSimpleText(currentDocument[currentDocument.cp][currentDocument.cw])
 
 	if (word ~= "") then
@@ -215,6 +219,10 @@ end
 -- The core of the offline checker: scan forward looking for misspelt words.
 
 function Cmd.FindNextMisspeltWord()
+	if currentDocument:usesTextBuffer() then
+		NonmodalMessage("Spellchecking mapped text is not available yet.")
+		return false
+	end
 	ImmediateMessage("Searching...")
 
 	-- If we have a selection, start checking from immediately
@@ -384,4 +392,3 @@ function Cmd.ConfigureSystemDictionary()
 
 	return true
 end
-

@@ -1,5 +1,5 @@
 globals_c_srcs = files(
-  'utils.c', 'cmark.c', 'filesystem.c', 'main.c', 'screen.c', 'word.c', 'zip.c',
+  'utils.c', 'cmark.c', 'filesystem.c', 'textbuffer.c', 'main.c', 'screen.c', 'word.c', 'zip.c',
 )
 
 globals_lib = static_library('globals',

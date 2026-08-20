@@ -428,10 +428,168 @@ local function drawscrollbar(top_y, bottom_y)
 	SetNormal()
 end
 
+local function drawtextscrollbar(top_y, bottom_y, first, last, total)
+	local height = bottom_y - top_y + 1
+	if height < 2 then return end
+	local x = ScreenWidth - SCROLLBAR_WIDTH
+	local visible = math.max(1, last - first)
+	local geom = ComputeScrollbarGeometry(math.max(1, total), first + 1,
+		visible, height)
+	local u = UseUnicode() and 1 or 2
+	SetNormal()
+	SetColour(Palette.MarkerFG, Palette.Desktop)
+	Write(x, top_y, SCROLLBAR_SYMBOLS.up[u])
+	Write(x, bottom_y, SCROLLBAR_SYMBOLS.down[u])
+	if geom.track_height > 0 then
+		SetColour(Palette.StyleFG, Palette.Desktop)
+		SetDim()
+		for row = 0, geom.track_height - 1 do
+			Write(x, top_y + 1 + row, SCROLLBAR_SYMBOLS.track[u])
+		end
+		SetNormal()
+		SetColour(Palette.StatusbarFG, Palette.StatusbarBG)
+		SetReverse()
+		for row = geom.thumb_start, geom.thumb_start + geom.thumb_size - 1 do
+			Write(x, top_y + 1 + row, SCROLLBAR_SYMBOLS.thumb[u])
+		end
+	end
+	SetNormal()
+end
+
+-- Piece tables are a storage backend, not a second UI. This renderer only
+-- supplies visible text rows; all surrounding chrome is shared with the
+-- regular WordProcess frontend (paper, rulers, margins, status and scrollbar).
+local function redrawtextbuffer()
+	SetColour(nil, Palette.Desktop)
+	ClearScreen()
+	local document = currentDocument
+	if document._textbuffer:sourcechanged() then
+		redrawstatus()
+		DrawStatusLine("Source file changed on disk; close and import it again safely.")
+		GotoXY(0, 0)
+		return
+	end
+
+	local fixed = GetScrollMode() == "Fixed"
+	local terminators = WantTerminators() and ScreenHeight >= 8
+	local status_y = documentSet.statusbar and (ScreenHeight - 1) or ScreenHeight
+	local lm, rm = papermargin, papermargin + paperwidth - 1
+	local min_y, max_y = 0, status_y - 1
+	local top_marker, bottom_marker
+	if fixed and terminators then
+		min_y, max_y = 3, status_y - 3
+		top_marker, bottom_marker = 2, status_y - 2
+	elseif terminators and (document._texttop or 0) == 0 then
+		min_y, top_marker = 3, 2
+	end
+
+	SetColour(Palette.P_FG, Palette.P_BG)
+	SetNormal()
+	ClearArea(lm, min_y, rm, max_y)
+	lineindex = {}
+
+	local line_start = document:textLineBounds()
+	local offset = document._texttop or line_start
+	local selection_start, selection_end = document:textSelection()
+	local cursor_column = document:textCellOffset(line_start, document._textpos)
+	local horizontal = document._texthorizontal or 0
+	if cursor_column < horizontal then horizontal = cursor_column end
+	if cursor_column >= horizontal + paperwidth then
+		horizontal = cursor_column - paperwidth + 1
+	end
+	document._texthorizontal = horizontal
+	local cursor_y = min_y
+	local cursor_display_start = line_start
+	local y = min_y
+	local visible_line = document._texttopline
+
+	while y <= max_y and offset < document._textbuffer:size() do
+		if offset == line_start then cursor_y = y end
+		local newline = document._textbuffer:find(offset, 10)
+		local finish = newline or document._textbuffer:size()
+		if finish > offset and document._textbuffer:slice(finish - 1, 1) == "\r" then
+			finish = finish - 1
+		end
+		local display_start, visible_end = document:textViewport(offset, finish,
+			horizontal, paperwidth)
+		if offset == line_start then cursor_display_start = display_start end
+		local length = visible_end - display_start
+		SetColour(Palette.P_FG, Palette.P_BG)
+		SetNormal()
+		if length > 0 then
+			local marked_start = selection_start and math.max(display_start, selection_start)
+			local marked_end = selection_end and math.min(visible_end, selection_end)
+			if marked_start and marked_end and marked_start < marked_end then
+				local before = marked_start - display_start
+				if before > 0 then
+					Write(lm, y, document._textbuffer:slice(display_start, before))
+				end
+				SetReverse()
+				local beforecells = document:textCellOffset(display_start, marked_start)
+				Write(lm + beforecells, y, document._textbuffer:slice(marked_start,
+					marked_end - marked_start))
+				SetNormal()
+				if marked_end < visible_end then
+					Write(lm + document:textCellOffset(display_start, marked_end), y,
+						document._textbuffer:slice(marked_end, visible_end - marked_end))
+				end
+			else
+				Write(lm, y, document._textbuffer:slice(display_start, length))
+			end
+		end
+
+		if currentDocument.viewmode > 1 and papermargin > 1 then
+			local label
+			if currentDocument.viewmode == 2 then label = "P"
+			elseif currentDocument.viewmode == 3 then
+				label = visible_line and tostring(visible_line) or "~"
+			elseif currentDocument.viewmode == 4 then
+				local shown = length > 0 and
+					document._textbuffer:slice(display_start, length) or ""
+				local count = 0
+				for _ in shown:gmatch("%S+") do count = count + 1 end
+				label = tostring(count)
+			end
+			if label then
+				SetColour(Palette.StyleFG, Palette.Desktop)
+				SetDim()
+				RAlignInField(0, y, papermargin - 1, label)
+			end
+		end
+
+		lineindex[y + 1] = {textoffset = offset, textdisplaystart = display_start}
+		if not newline then
+			offset = document._textbuffer:size()
+			break
+		end
+		offset = newline + 1
+		if visible_line then visible_line = visible_line + 1 end
+		y = y + 1
+	end
+	document._textbottom = offset
+
+	if top_marker then drawtopmarker(top_marker) end
+	if fixed and bottom_marker then
+		drawbottommarker(bottom_marker)
+	elseif terminators and offset >= document._textbuffer:size() and y <= max_y then
+		drawbottommarker(y)
+	end
+	drawtextscrollbar(0, status_y - 1, document._texttop or 0, offset,
+		document._textbuffer:size())
+	redrawstatus()
+	GotoXY(lm + math.min(document:textCellOffset(cursor_display_start,
+		document._textpos),
+		paperwidth - 1), cursor_y)
+	FireEvent("Redraw")
+end
+
 function RedrawScreen()
 	-- We can't actual draw until the first resize event has been processed.
 	if ScreenHeight == 0 then
 		return
+	end
+	if currentDocument:usesTextBuffer() then
+		return redrawtextbuffer()
 	end
 
 	SetColour(nil, Palette.Desktop)

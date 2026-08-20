@@ -98,6 +98,7 @@ extern void script_init(void);
 extern void script_load(const char* filename);
 extern void script_load_from_table(const FileDescriptor* table);
 extern void script_run(const char* argv[]);
+extern void textbuffer_init(void);
 
 #if !defined LUA_VERSION_NUM || LUA_VERSION_NUM == 501
 extern void luaL_setfuncs(lua_State* L, const luaL_Reg* l, int nup);
