@@ -1,0 +1,10 @@
+option('xwp', type: 'boolean', value: true,
+  description: 'Build the glfw/OpenGL xwp frontend (needs glfw3, gl, xcb)')
+
+option('app_version', type: 'string', value: '1.0',
+  description: 'Version displayed by WordProcess and embedded in generated documentation')
+
+option('lua_version', type: 'combo',
+  choices: ['auto', '5.1', '5.2', '5.3', '5.4', '5.5'],
+  value: 'auto',
+  description: 'System PUC-Rio Lua version to build against (pkg-config luaX.Y); auto picks the newest installed')

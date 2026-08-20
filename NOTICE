@@ -1,0 +1,9 @@
+WordProcess
+Copyright © 2026 Leandro V. Catarin
+
+WordProcess is an independent fork of WordGrinder. Thanks to David Given for
+the design, implementation, and maintenance of the original project.
+
+Source files and other material inherited from the original project retain
+their existing copyright notices. See licenses/COPYING.WordProcess for the MIT
+license and licenses/ for third-party notices.

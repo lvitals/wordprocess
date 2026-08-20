@@ -1,0 +1,81 @@
+--!nonstrict
+loadfile("tests/testsuite.lua")()
+
+Cmd.InsertStringIntoParagraph("fnord")
+Cmd.SetMark()
+Cmd.GotoPreviousCharW()
+Cmd.GotoPreviousCharW()
+Cmd.GotoPreviousCharW()
+Cmd.Copy()
+Cmd.UnsetMark()
+
+local clipboard = GetClipboard()
+AssertEquals(1, #clipboard)
+AssertTableEquals({"ord"}, clipboard[1])
+AssertEquals("P", clipboard[1].style)
+
+Cmd.GotoEndOfDocument()
+Cmd.Paste()
+
+AssertEquals(1, #currentDocument)
+AssertTableEquals({"fnordord"}, currentDocument[1])
+
+Cmd.GotoBeginningOfDocument()
+Cmd.SetMark()
+Cmd.GotoNextCharW()
+Cmd.GotoNextCharW()
+Cmd.GotoNextCharW()
+Cmd.Copy()
+Cmd.UnsetMark()
+
+local clipboard = GetClipboard()
+AssertEquals(1, #clipboard)
+AssertTableEquals({"fno"}, clipboard[1])
+
+Cmd.GotoEndOfDocument()
+Cmd.Paste()
+
+AssertEquals(1, #currentDocument)
+AssertTableEquals({"fnordordfno"}, currentDocument[1])
+
+ResetDocumentSet()
+Cmd.InsertStringIntoParagraph("The quick brown fox jumps")
+Cmd.SplitCurrentParagraph()
+Cmd.ChangeParagraphStyle("RAW")
+Cmd.InsertStringIntoParagraph("over the lazy")
+Cmd.SplitCurrentParagraph()
+Cmd.ChangeParagraphStyle("P")
+Cmd.InsertStringIntoParagraph("dog.")
+
+Cmd.GotoBeginningOfDocument()
+Cmd.GotoNextCharW()
+Cmd.SetMark()
+Cmd.GotoEndOfDocument()
+Cmd.GotoPreviousCharW()
+Cmd.Copy()
+Cmd.UnsetMark()
+
+local clipboard = GetClipboard()
+AssertEquals(3, #clipboard)
+AssertTableEquals({"he", "quick", "brown", "fox", "jumps"}, clipboard[1])
+AssertEquals("P", clipboard[1].style)
+AssertTableEquals({"over", "the", "lazy"}, clipboard[2])
+AssertEquals("RAW", clipboard[2].style)
+AssertTableEquals({"dog"}, clipboard[3])
+AssertEquals("P", clipboard[3].style)
+
+Cmd.GotoBeginningOfParagraph()
+Cmd.Paste()
+
+AssertEquals(5, #currentDocument)
+AssertTableEquals({"The", "quick", "brown", "fox", "jumps"}, currentDocument[1])
+AssertEquals("P", currentDocument[1].style)
+AssertTableEquals({"over", "the", "lazy"}, currentDocument[2])
+AssertEquals("RAW", currentDocument[2].style)
+AssertTableEquals({"he", "quick", "brown", "fox", "jumps"}, currentDocument[3])
+AssertEquals("P", currentDocument[3].style)
+AssertTableEquals({"over", "the", "lazy"}, currentDocument[4])
+AssertEquals("RAW", currentDocument[4].style)
+AssertTableEquals({"dogdog."}, currentDocument[5])
+AssertEquals("P", currentDocument[5].style)
+

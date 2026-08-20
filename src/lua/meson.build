@@ -1,0 +1,80 @@
+# Embeds the application's .lua sources into script_table.h (a
+# `FileDescriptor script_table[]`, consumed by src/c/globals.h /
+# src/c/lua.c's script_load_from_table()). Same mechanism/order as
+# src/lua/build.py's `multibin(name="luacode", symbol="script_table", ...)`.
+#
+# The build-time Luau typechecker step (src/lua+typecheck in the ab build,
+# tools/typechecker.cc) is intentionally NOT reproduced here: it's a
+# Luau-Analysis-only static checker, irrelevant to whether the binary runs,
+# and Luau itself goes away in Phase 3.
+wordprocess_lua_srcs = files(
+  '_prologue.lua',
+  'objects.lua',
+  'events.lua',
+  'margin.lua',
+  'main.lua',
+  'xml.lua',
+  'utils.lua',
+  'scrollbar.lua',
+  'redraw.lua',
+  'settings.lua',
+  'document.lua',
+  'documentset.lua',
+  'paragraph.lua',
+  'forms.lua',
+  'ui.lua',
+  'browser.lua',
+  'html.lua',
+  'xpattern.lua',
+  'fileio.lua',
+  'export.lua',
+  'export/text.lua',
+  'export/html.lua',
+  'export/latex.lua',
+  'export/troff.lua',
+  'export/opendocument.lua',
+  'export/org.lua',
+  'export/markdown.lua',
+  'import.lua',
+  'import/html.lua',
+  'import/text.lua',
+  'import/opendocument.lua',
+  'import/markdown.lua',
+  'navigate.lua',
+  'addons/goto.lua',
+  'addons/autosave.lua',
+  'addons/docsetman.lua',
+  'addons/gui.lua',
+  'addons/scrapbook.lua',
+  'addons/statusbar_charstyle.lua',
+  'addons/statusbar_pagecount.lua',
+  'addons/statusbar_position.lua',
+  'addons/statusbar_wordcount.lua',
+  'addons/debug.lua',
+  'addons/look-and-feel.lua',
+	'addons/page-layout.lua',
+  'addons/keymapoverride.lua',
+  'addons/smartquotes.lua',
+  'addons/undo.lua',
+  'addons/spillchocker.lua',
+  'addons/templates.lua',
+  'addons/directories.lua',
+  'addons/recents.lua',
+  'colours.lua',
+  'menu.lua',
+  'cli.lua',
+)
+
+# include_directories('.') exposes both this source dir and its build-dir
+# counterpart (where script_table.h actually gets generated) on the -I path.
+script_table_inc = include_directories('.')
+
+script_table_h = custom_target('script_table.h',
+  input: wordprocess_lua_srcs,
+  output: 'script_table.h',
+  command: [find_program('python3'),
+            meson.project_source_root() / 'tools/meson-multibin2c.py',
+            '--root', meson.project_source_root(),
+            'script_table', '@INPUT@'],
+  capture: true,
+)

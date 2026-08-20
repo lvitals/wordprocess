@@ -1,0 +1,36 @@
+.TH WP 1 "@@@DATE@@@" "@@@VERSION@@@" "WordProcess"
+.SH NAME
+wp \- keyboard-focused console word processor
+.SH SYNOPSIS
+.B wp
+.RI [ options ]
+.RI [ file.wp ]
+.SH DESCRIPTION
+.B WordProcess
+is a Unicode-aware word processor for structured and long-form writing. A
+native .wp file can contain multiple documents and document-specific settings.
+.SH OPTIONS
+.TP
+.B \-h, \-\-help
+Show command-line help.
+.TP
+.B \-v, \-\-version
+Show the application version.
+.TP
+.BI \-\-lua " file"
+Run a Lua script and exit.
+.TP
+.BI \-\-exec " command"
+Run a Lua command and exit.
+.TP
+.BI \-\-convert " source destination"
+Convert between supported document formats.
+.SH FILES
+.TP
+.B ~/.wordprocess/startup.lua
+Optional per-user startup script.
+.SH AUTHORS
+WordProcess changes are maintained by Leandro V. Catarin. WordProcess is a
+fork of WordGrinder; thanks to David Given for the original work.
+.SH LICENSE
+MIT. See licenses/COPYING.WordProcess and the bundled third-party notices.
