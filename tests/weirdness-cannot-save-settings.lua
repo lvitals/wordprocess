@@ -19,3 +19,12 @@ GlobalSettings = {}
 LoadGlobalSettings(filename)
 
 AssertTableAndPropertiesEquals(want, GlobalSettings)
+
+-- An interrupted or otherwise incomplete settings save must not prevent the
+-- application from starting.
+GlobalSettings = {}
+local emptyFilename = wg.mkdtemp().."/empty-settings.dat"
+local _, writeError = wg.writefile(emptyFilename, "")
+AssertEquals(nil, writeError)
+LoadGlobalSettings(emptyFilename)
+AssertTableAndPropertiesEquals({}, GlobalSettings)

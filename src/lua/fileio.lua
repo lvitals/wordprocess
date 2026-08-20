@@ -598,7 +598,12 @@ function LoadFromString(filename, data)
 	local fp = CreateIStream(data)
 
 	local loader = nil
-	local magic = fp:read("*l"):gsub("\r", "")
+	local firstline = fp:read("*l")
+	if not firstline then
+		fp:close()
+		return nil, ("'"..filename.."' is empty and is not a valid WordProcess file.")
+	end
+	local magic = firstline:gsub("\r", "")
 	if (magic == MAGIC) then
 		loader = loadfromstream
 	elseif (magic == ZMAGIC) then
@@ -804,4 +809,3 @@ function SetClipboard(document)
 	local wgdata = SaveToHeaderlessString(documentSet)
 	wg.clipboard_set(text, wgdata)
 end
-
