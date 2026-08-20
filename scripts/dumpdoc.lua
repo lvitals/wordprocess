@@ -12,7 +12,7 @@
 --
 -- To use:
 --
---     wp --lua dumpdoc.lua nameofwgfile.wp
+--     wp --lua dumpdoc.lua document.wp
 
 local ParseWord = wg.parseword
 local bitand = bit32.band
@@ -271,4 +271,3 @@ end
 
 main(...)
 os.exit(0)
-

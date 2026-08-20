@@ -25,7 +25,7 @@ local function main(inputfile, template)
 
     local export_table =
     {
-        ["wg"] = Cmd.SaveCurrentDocumentAs,
+        ["wp"] = Cmd.SaveCurrentDocumentAs,
         ["odt"] = Cmd.ExportODTFile,
         ["html"] = Cmd.ExportHTMLFile,
         ["tr"] = Cmd.ExportTroffFile,
@@ -57,5 +57,4 @@ end
 
 main(...)
 os.exit(0)
-
 

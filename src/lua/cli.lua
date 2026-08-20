@@ -13,7 +13,7 @@ local import_table =
 	["md"] = Cmd.ImportMarkdownFile,
 	["odt"] = Cmd.ImportODTFile,
 	["txt"] = Cmd.ImportTextFile,
-	["wg"] = Cmd.LoadDocumentSet,
+	["wp"] = Cmd.LoadDocumentSet,
 }
 
 local export_table =
@@ -25,7 +25,7 @@ local export_table =
 	["tex"] = Cmd.ExportLatexFile,
 	["tr"] = Cmd.ExportTroffFile,
 	["txt"] = Cmd.ExportTextFile,
-	["wg"] = Cmd.SaveCurrentDocumentAs,
+	["wp"] = Cmd.SaveCurrentDocumentAs,
 --	["rtf"] = Cmd.ExportRTFFile,
 }
 
@@ -114,8 +114,8 @@ function CliConvert(file1, file2)
 	end
 
 	if (f1hs ~= "") then
-		if (f1e == "wg") then
-			-- If the user specified a document name, and we loaded a wg file,
+		if (f1e == "wp") then
+			-- If the user specified a document name, and we loaded a WordProcess file,
 			-- then select the specified document.
 
 			local dl = documentSet:getDocumentList()

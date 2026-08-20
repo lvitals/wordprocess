@@ -1,0 +1,69 @@
+.Dd August 20, 2026
+.Dt WORDPROCESS-CONFIG 5
+.Os WordProcess 1.0
+.
+.Sh NAME
+.Nm wordprocess-config
+.Nd WordProcess configuration files and settings
+.
+.Sh DESCRIPTION
+WordProcess separates machine-wide user preferences from settings stored in a
+native document set.
+On Unix, its configuration root is
+.Pa ~/.wordprocess .
+.
+.Sh FILES
+.Bl -tag -width ~/.wordprocess/user.dictionary
+.It Pa ~/.wordprocess/startup.lua
+Trusted Lua code executed after core initialisation and before the interactive
+screen starts.
+Override for one invocation with
+.Fl -config .
+.It Pa ~/.wordprocess/settings.dat
+Serialised global settings.
+Do not edit it as text.
+.It Pa ~/.wordprocess/templates/
+Default template directory.
+.It Pa ~/.wordprocess/templates/default.wp
+Loaded for new document sets when its native format matches the application.
+.It Pa ~/.wordprocess/user.dictionary
+Words accepted by the user spellchecker.
+.El
+.
+.Sh GLOBAL SETTINGS
+Global settings include editor width and wrapping, display theme, scrolling,
+Tab behaviour, paragraph presentation, GUI dimensions and fonts, template and
+autosave directories, system dictionary, recent files, and debug status terms.
+.
+.Sh DOCUMENT-SET SETTINGS
+The native set stores autosave, scrapbook, smart-quote, spellchecker, HTML
+export, approximate page count, clipboard, and status-bar settings.
+Each document stores its content, cursor, margin view, and physical page layout.
+.
+.Sh AUTOSAVE
+Autosave is disabled by default and requires one prior manual save.
+The default interval is ten minutes and the default filename pattern is
+.Dq %F.autosave.%T.wp .
+.Sy %F
+is the primary base filename and
+.Sy %T
+is a timestamp.
+An explicit global autosave directory overrides the primary file's directory.
+.
+.Sh STARTUP SCRIPTING
+The startup file may call high-level functions in the
+.Sy Cmd
+table, register callbacks with
+.Fn AddEventListener ,
+and change bindings with
+.Fn OverrideKey .
+Scripts run with the user's process permissions and are not sandboxed.
+The low-level
+.Sy wg
+Lua table is an internal native bridge retained for source compatibility; it is
+unrelated to the native filename extension.
+.
+.Sh SEE ALSO
+.Xr wp 1 ,
+.Xr xwp 1 ,
+.Xr wordprocess 5

@@ -1,0 +1,57 @@
+.Dd August 20, 2026
+.Dt XWP 1
+.Os WordProcess 1.0
+.
+.Sh NAME
+.Nm xwp
+.Nd graphical WordProcess frontend
+.
+.Sh SYNOPSIS
+.Nm
+.Op Ar options
+.Op Ar file.wp
+.
+.Sh DESCRIPTION
+.Nm
+provides the GLFW/OpenGL frontend for WordProcess.
+It uses the same native format, editing engine, menus, commands, configuration,
+conversion interface, and scripting interface as
+.Xr wp 1 .
+It adds a graphical window, embedded default fonts, and pointer selection.
+.
+.Pp
+Press and drag the primary pointer button to select text.
+Window resize events reflow the display; closing the window follows the normal
+quit path and prompts when a document set has unsaved changes.
+.
+.Sh OPTIONS
+All options are identical to
+.Xr wp 1 .
+Run
+.Nm
+.Fl -help
+for the complete list.
+.
+.Sh CONFIGURATION
+The GUI settings dialog controls default window width and height, font size,
+and paths for regular, italic, bold, and bold-italic fonts.
+The built-in defaults use Fantasque Sans Mono.
+Changing GUI settings reinitialises the screen.
+.
+.Sh FILES
+See
+.Xr wordprocess-config 5
+for global files and directories.
+.
+.Sh SEE ALSO
+.Xr wp 1 ,
+.Xr wordprocess 5 ,
+.Xr wordprocess-config 5
+.
+.Sh AUTHORS
+WordProcess changes are maintained by Leandro V. Catarin.
+WordProcess is derived from WordGrinder by David Given.
+.
+.Sh LICENSE
+MIT.
+

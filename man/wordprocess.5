@@ -1,0 +1,85 @@
+.Dd August 20, 2026
+.Dt WORDPROCESS 5
+.Os WordProcess 1.0
+.
+.Sh NAME
+.Nm wordprocess
+.Nd WordProcess native document-set format and content model
+.
+.Sh DESCRIPTION
+A WordProcess
+.Pa .wp
+file is a compressed binary document set.
+It contains one or more ordered, uniquely named documents plus set-level
+settings, clipboard data, and add-on state.
+Native format 8 is written by WordProcess 1.0.
+The file is not a text interchange format and must not be edited manually.
+.
+.Sh DOCUMENT MODEL
+Each document is an ordered sequence of paragraphs.
+Each paragraph has one structural style and contains words with embedded
+character-style transitions.
+Bold, italic, and underline may overlap.
+A cursor and optional mark identify the active position and selection.
+.
+.Sh PARAGRAPH STYLES
+.Bl -tag -width PRE
+.It Sy P
+Plain body text.
+.It Sy H1 Ns (en Ns Sy H4
+Heading levels one through four.
+.It Sy Q
+Indented text or long quotation.
+.It Sy N
+Footnote or endnote.
+.It Sy C
+Figure or table caption.
+.It Sy LB
+Bulleted list item.
+.It Sy LN
+Numbered list item.
+.It Sy L
+Unmarked list item.
+.It Sy V
+Run-together indented text.
+.It Sy PRE
+Preformatted text.
+.It Sy RAW
+Raw target-language output for supporting exporters.
+.El
+.
+.Sh PAGE LAYOUT
+Every document stores page width and height, four margins, body and special font
+sizes, body and special line spacing, and long-quote indent.
+Built-in starting profiles are Custom, ABNT, and Book.
+Editing any preset value marks the layout Custom.
+.
+.Sh PERSISTENCE
+Native saves first write
+.Pa file.wp.new ,
+then replace
+.Pa file.wp .
+Compatibility loaders upgrade older formats 1 through 7.
+A format mismatch or malformed stream is reported instead of being treated as
+plain text.
+.
+.Sh IMPORT AND EXPORT
+Native import and export operate on the complete set.
+Interactive import of another format adds one named document.
+Interactive non-native export writes the current document only.
+Supported import formats are text, Markdown, HTML, and OpenDocument Text.
+Export additionally supports Org, LaTeX, and troff.
+Lossless round trips are guaranteed only for the native format.
+.
+.Sh SECURITY CONSIDERATIONS
+.Sy RAW
+paragraphs can bypass target escaping in supporting exporters and should hold
+only trusted content.
+Native files and startup scripts should likewise be obtained from trusted
+sources.
+.
+.Sh SEE ALSO
+.Xr wp 1 ,
+.Xr xwp 1 ,
+.Xr wordprocess-config 5
+

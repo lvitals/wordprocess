@@ -47,6 +47,17 @@ wp manuscript.wp
 Use `wp --help` for command-line conversion and scripting options.
 Global configuration is stored in `~/.wordprocess/`.
 
+## Documentation
+
+The complete English documentation starts at [`docs/README.md`](docs/README.md).
+Traditional Unix manual pages for the frontends, native format, and
+configuration are available in `man/` and can be read directly, for example:
+
+```sh
+man ./man/wp.1
+man ./man/wordprocess.5
+```
+
 ## Document workflow
 
 WordProcess files can contain multiple documents. Page-layout profiles provide

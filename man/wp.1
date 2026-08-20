@@ -1,0 +1,159 @@
+.Dd August 20, 2026
+.Dt WP 1
+.Os WordProcess 1.0
+.
+.Sh NAME
+.Nm wp
+.Nd keyboard-focused console word processor
+.
+.Sh SYNOPSIS
+.Nm
+.Op Fl 8hrv
+.Op Fl -no-unicode
+.Op Fl -no-ncurses-colour
+.Op Fl -config Ar file.lua
+.Op Ar file.wp
+.Nm
+.Fl c | Fl -convert
+.Ar source destination
+.Nm
+.Fl -lua Ar file.lua
+.Op Ar argument ...
+.Nm
+.Fl -exec Ar command
+.Op Ar argument ...
+.
+.Sh DESCRIPTION
+.Nm
+is the ncurses frontend for WordProcess, a Unicode-aware word processor for
+structured and long-form writing.
+A native
+.Pa .wp
+file is a document set containing one or more named documents, styles,
+settings, page layouts, and add-on state.
+.
+.Pp
+With no file,
+.Nm
+loads the default template or creates a blank set.
+If the named file does not exist, its path is retained as the destination for
+the first save.
+Press Escape to open the menu.
+.
+.Sh OPTIONS
+.Bl -tag -width Ds
+.It Fl h , Fl -help
+Print command-line help and exit.
+.It Fl v , Fl -version
+Print the application version and exit.
+.It Fl c , Fl -convert Ar source destination
+Convert between formats selected from their filename extensions and exit.
+.It Fl -lua Ar file.lua
+Load and execute a Lua file, passing all remaining arguments to it, then exit.
+.It Fl -exec Ar command
+Execute a Lua source string, passing all remaining arguments to it, then exit.
+.It Fl -config Ar file.lua
+Use this startup configuration file instead of the default.
+.It Fl r , Fl -recent
+Open the most recently used native file.
+.It Fl 8 , Fl -no-unicode
+Use an ISO-8859-1-compatible display character set instead of Unicode glyphs.
+.It Fl -no-ncurses-colour
+Accepted for compatibility; currently has no effect.
+.El
+.
+.Sh CONVERSION
+Input extensions are
+.Pa wp , txt , md , html ,
+and
+.Pa odt .
+Output additionally supports
+.Pa org , tex ,
+and
+.Pa tr .
+Extensions are case-sensitive.
+.
+.Pp
+Append
+.Sq : Ns Ar name
+to native input to select a document from a set:
+.Bd -literal -offset indent
+wp --convert 'book.wp:Chapter 1' chapter1.odt
+.Ed
+For non-native input the suffix assigns a name to the imported document.
+The output must not have a document-name suffix.
+.
+.Sh KEY BINDINGS
+.Bl -tag -width Ctrl-Right
+.It Escape
+Open the menu.
+.It Ctrl-S , Ctrl-O , Ctrl-Q
+Save, open, and exit.
+.It Arrow keys
+Move by display line or character.
+.It Ctrl-Left , Ctrl-Right
+Move by word.
+.It Ctrl-Up , Ctrl-Down
+Move by paragraph.
+.It Home , End
+Move to a display-line boundary.
+.It Ctrl-Home , Ctrl-End
+Move to a document boundary.
+.It Shift plus movement
+Extend the selection.
+.It Ctrl-X , Ctrl-C , Ctrl-V
+Cut, copy, and paste.
+.It Ctrl-Z , Ctrl-Y
+Undo and redo.
+.It Ctrl-F , Ctrl-K , Ctrl-R
+Find, find next, and replace then find.
+.It Ctrl-B , Ctrl-I , Ctrl-U , Ctrl-N
+Apply bold, italic, underline, or normal character style.
+.It Ctrl-P
+Choose a paragraph style.
+.El
+.
+.Sh FILES
+.Bl -tag -width ~/.wordprocess/user.dictionary
+.It Pa ~/.wordprocess/startup.lua
+Default trusted Lua startup file.
+.It Pa ~/.wordprocess/settings.dat
+Serialised global settings.
+.It Pa ~/.wordprocess/templates/
+Template directory.
+.It Pa ~/.wordprocess/templates/default.wp
+Optional template for new sets.
+.It Pa ~/.wordprocess/user.dictionary
+User spelling dictionary.
+.El
+.
+.Sh ENVIRONMENT
+.Bl -tag -width USERPROFILE
+.It Ev HOME
+Used to locate the configuration directory on Unix.
+.It Ev USERPROFILE
+Fallback home directory on systems without
+.Ev HOME .
+.El
+.
+.Sh EXIT STATUS
+.Ex -std
+Conversion and script failures exit nonzero and print a diagnostic prefixed
+with
+.Dq wp: .
+.
+.Sh SEE ALSO
+.Xr xwp 1 ,
+.Xr wordprocess 5 ,
+.Xr wordprocess-config 5
+.
+.Sh AUTHORS
+WordProcess changes are maintained by Leandro V. Catarin.
+WordProcess is derived from WordGrinder by David Given.
+.
+.Sh LICENSE
+MIT.
+See
+.Pa licenses/COPYING.WordProcess
+and the bundled third-party notices.
+
