@@ -54,3 +54,17 @@ AssertEquals(1, currentDocument._topp)
 if currentDocument._botp >= topp then
 	error("expected jumping to the start of the document to actually scroll there")
 end
+
+-- A destructive edit can invalidate the viewport's paragraph/word anchor
+-- between frames. Select-all + Backspace must fall back to a fresh viewport
+-- instead of asking Paragraph.getLineOfWord() about a deleted word.
+currentDocument.cp = #currentDocument
+currentDocument.cw = #currentDocument[currentDocument.cp]
+currentDocument.co = #currentDocument[currentDocument.cp][currentDocument.cw] + 1
+RedrawScreen()
+AssertEquals(true, Cmd.SelectAll())
+AssertEquals(true, Cmd.DeleteSelectionOrPreviousChar())
+RedrawScreen()
+AssertEquals(1, #currentDocument)
+AssertTableEquals({""}, currentDocument[1])
+AssertEquals(1, currentDocument._topp)

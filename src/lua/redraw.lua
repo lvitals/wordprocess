@@ -400,14 +400,26 @@ local function rowoffsetfromtop(topp, topw, cp, cw, co, height)
 	if not topparagraph then
 		return nil
 	end
-	local topline = topparagraph:getLineOfWord(topw)
+	-- Viewport anchors describe the previous frame. Editing can delete or
+	-- merge the paragraph/word they point at (select-all + Backspace is the
+	-- simplest case), so an invalid anchor means "recompute the viewport",
+	-- not a fatal document error.
+	local ok, topline = pcall(topparagraph.getLineOfWord,
+		topparagraph, topw)
+	if not ok then
+		return nil
+	end
 	if not topline then
 		return nil
 	end
 
 	local row
 	if cp == topp then
-		local cline = topparagraph:getLineOfWord(cw, co)
+		local cursorok, cline = pcall(topparagraph.getLineOfWord,
+			topparagraph, cw, co)
+		if not cursorok then
+			return nil
+		end
 		if not cline or (cline < topline) then
 			return nil
 		end
@@ -435,7 +447,11 @@ local function rowoffsetfromtop(topp, topw, cp, cw, co, height)
 		if not cparagraph then
 			return nil
 		end
-		local cline = cparagraph:getLineOfWord(cw, co)
+		local cursorok, cline = pcall(cparagraph.getLineOfWord,
+			cparagraph, cw, co)
+		if not cursorok then
+			return nil
+		end
 		if not cline then
 			return nil
 		end
