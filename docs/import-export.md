@@ -13,6 +13,12 @@
 | `.tex` | No | Yes | LaTeX |
 | `.tr` | No | Yes | troff source |
 
+Troff exports preserve Unicode as groff character escapes and use the `ms`
+macro package. Render terminal output with `groff -Tutf8 -ms FILE.tr`; invoking
+groff without `-Tutf8` selects a typesetter device whose standard fonts do not
+define many non-Latin characters and therefore produces missing-character
+warnings.
+
 Interactive import adds one document named from the source leaf name, adding a
 numeric suffix when needed. Interactive export writes only the current
 document, except a native `.wp` save, which writes the complete set.
@@ -69,4 +75,3 @@ wp --lua scripts/concat.lua novel.wp combined.wp
 
 `scripts/dumpdoc.lua` prints a diagnostic representation of the compressed
 native file. It is a debugging tool, not a supported interchange format.
-
