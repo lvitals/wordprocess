@@ -377,8 +377,14 @@ end
 
 function Cmd.InsertStringIntoWord(c)
 	if currentDocument:usesTextBuffer() then
+		local position = currentDocument._textpos
+		local stylehint = GetCurrentStyleHint()
 		currentDocument._textbuffer:insert(currentDocument._textpos, c)
 		currentDocument:adjustLargeStyleSpans(currentDocument._textpos, 0, #c)
+		if stylehint ~= 0 then
+			currentDocument:addLargeCharacterStyle(position, position + #c,
+				stylehint)
+		end
 		currentDocument._textpos = currentDocument._textpos + #c
 		currentDocument._textchanged = true
 		documentSet:touch()
@@ -936,10 +942,15 @@ end
 
 function Cmd.SetStyle(s)
 	if currentDocument:usesTextBuffer() then
+		local sor, sand = unpack(style_tab[s] or {})
+		if sor == nil then return false end
 		local first, last = currentDocument:textSelection()
 		if not first or first == last then
-			NonmodalMessage("Select text before applying a character style.")
-			return false
+			-- Match ordinary-document behaviour: with no selection these commands
+			-- set the style used by subsequently typed text.
+			SetCurrentStyleHint(sor, sand)
+			QueueRedraw()
+			return true
 		end
 		local style = ({b=wg.BOLD, i=wg.ITALIC, u=wg.UNDERLINE, o=0})[s]
 		if style == nil then return false end

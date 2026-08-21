@@ -48,7 +48,7 @@ with that path already selected for saving.
 Press Escape to open the menu. Menu letters choose an entry. Arrow keys or
 `H`/`J`/`K`/`L` navigate left/down/up/right. Outside menus, arrow keys move the
 cursor; Shift plus a movement key extends a selection. Printable text is
-inserted directly. Space separates words, Return starts a paragraph, and Tab
+inserted directly. Space separates words, Return starts a paragraph, and Ctrl-T
 inserts editable spacing when enabled.
 
 Save with Ctrl-S and exit with Ctrl-Q. A native save writes the entire document

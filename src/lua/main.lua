@@ -180,12 +180,12 @@ function WordProcessor(filename)
             Cmd.SplitCurrentWord },
         ["KEY_RETURN"] = GroupCallback{ Cmd.Checkpoint, Cmd.TypeWhileSelected,
             Cmd.SplitCurrentParagraph },
-		["\t"] = GroupCallback{ Cmd.Checkpoint, Cmd.TypeWhileSelected,
-			Cmd.InsertTab },
-		["KEY_TAB"] = GroupCallback{ Cmd.Checkpoint, Cmd.TypeWhileSelected,
-			Cmd.InsertTab },
-		["KEY_^I"] = GroupCallback{ Cmd.Checkpoint, Cmd.TypeWhileSelected,
-			Cmd.InsertTab },
+		-- Terminal protocols encode the Tab key and Ctrl-I as the same byte.
+		-- In the editor that byte belongs unambiguously to the documented
+		-- Ctrl-I Italic command; tabulation insertion has its own Ctrl-T action.
+		["\t"] = function() return Cmd.SetStyle("i") end,
+		["KEY_TAB"] = function() return Cmd.SetStyle("i") end,
+		["KEY_^I"] = function() return Cmd.SetStyle("i") end,
         ["KEY_ESCAPE"] = GroupCallback{ Cmd.ActivateMenu },
         ["KEY_MENU"] = GroupCallback{ Cmd.ActivateMenu },
         ["KEY_COMMAND"] = start_command_layer,

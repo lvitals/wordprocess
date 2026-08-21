@@ -257,6 +257,23 @@ currentDocument._textmark = 0
 currentDocument._textpos = 5
 currentDocument.mp = 1
 AssertEquals(true, Cmd.SetStyle("b"))
+currentDocument._textmark, currentDocument._textpos, currentDocument.mp = 0, 5, 1
+AssertEquals(true, Cmd.SetStyle("i"))
+AssertEquals(true, bit32.btest(currentDocument:largeCharacterStyleAt(2), wg.BOLD))
+AssertEquals(true, bit32.btest(currentDocument:largeCharacterStyleAt(2), wg.ITALIC))
+currentDocument._textmark, currentDocument._textpos, currentDocument.mp = 0, 5, 1
+AssertEquals(true, Cmd.SetStyle("u"))
+AssertEquals(true, bit32.btest(currentDocument:largeCharacterStyleAt(2), wg.UNDERLINE))
+local visualRuns = BuildLargeTextStyleRuns(currentDocument, 0, 5, nil, nil, "P")
+AssertEquals(1, #visualRuns)
+AssertEquals(true, bit32.btest(visualRuns[1].mask, wg.BOLD))
+AssertEquals(true, bit32.btest(visualRuns[1].mask, wg.ITALIC))
+AssertEquals(true, bit32.btest(visualRuns[1].mask, wg.UNDERLINE))
+currentDocument._textmark, currentDocument._textpos, currentDocument.mp = 0, 5, 1
+AssertEquals(true, Cmd.SetStyle("o"))
+AssertEquals(0, currentDocument:largeCharacterStyleAt(2))
+currentDocument._textmark, currentDocument._textpos, currentDocument.mp = 0, 5, 1
+AssertEquals(true, Cmd.SetStyle("b"))
 currentDocument._textpos = 0
 AssertEquals(true, Cmd.ChangeParagraphStyle("H1"))
 AssertEquals(true, Cmd.SaveCurrentDocumentAs(nativePath))
@@ -286,6 +303,38 @@ AssertEquals(4, loadedNative.current.documentIndex.wordCount)
 AssertNotNull(loadedNative.current.documentIndex.paragraphStyles)
 AssertNotNull(loadedNative.current.documentIndex.characterStyles)
 AssertEquals(true, bit32.btest(loadedNative.current:largeCharacterStyleAt(0), wg.BOLD))
+
+-- Without a selection, Bold/Italic/Underline/Normal control the style of new
+-- mapped text exactly as they do in an ordinary WordProcess document.
+documentSet = loadedNative
+currentDocument = loadedNative.current
+currentDocument._textmark, currentDocument.mp = nil, nil
+currentDocument._textpos = currentDocument._textbuffer:size()
+AssertEquals(true, Cmd.SetStyle("o"))
+AssertEquals(true, Cmd.SetStyle("b"))
+local boldPosition = currentDocument._textpos
+AssertEquals(true, Cmd.InsertStringIntoWord("B"))
+AssertEquals(true, bit32.btest(currentDocument:largeCharacterStyleAt(
+	boldPosition), wg.BOLD))
+AssertEquals(true, Cmd.SetStyle("i"))
+local italicPosition = currentDocument._textpos
+AssertEquals(true, Cmd.InsertStringIntoWord("I"))
+AssertEquals(true, bit32.btest(currentDocument:largeCharacterStyleAt(
+	italicPosition), wg.ITALIC))
+AssertEquals(true, Cmd.SetStyle("u"))
+local underlinePosition = currentDocument._textpos
+AssertEquals(true, Cmd.InsertStringIntoWord("U"))
+AssertEquals(true, bit32.btest(currentDocument:largeCharacterStyleAt(
+	underlinePosition), wg.UNDERLINE))
+AssertEquals(true, Cmd.SetStyle("o"))
+local normalPosition = currentDocument._textpos
+AssertEquals(true, Cmd.InsertStringIntoWord("N"))
+AssertEquals(0, currentDocument:largeCharacterStyleAt(normalPosition))
+AssertEquals(true, Cmd.Undo())
+AssertEquals(true, Cmd.Undo())
+AssertEquals(true, Cmd.Undo())
+AssertEquals(true, Cmd.Undo())
+currentDocument._textchanged = false
 AssertEquals("H1", loadedNative.current:largeParagraphStyleAt(0))
 loadedNative.current:addLargeCharacterStyle(0, 5, wg.ITALIC)
 AssertEquals(true, bit32.btest(

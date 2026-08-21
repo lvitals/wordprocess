@@ -31,8 +31,8 @@ local function setLargeTextStyle(mask, selected)
 	if selected then SetReverse() end
 end
 
-local function drawLargeTextRange(document, x, y, first, finish,
-		selection_start, selection_end, paragraph_style)
+function BuildLargeTextStyleRuns(document, first, finish, selection_start,
+		selection_end, paragraph_style)
 	local boundaries = {first, finish}
 	local metadata = document:ensureDocumentIndex()
 	for _, span in ipairs(metadata and metadata.characterStyles or {}) do
@@ -50,18 +50,28 @@ local function drawLargeTextRange(document, x, y, first, finish,
 		end
 	end
 	table.sort(boundaries)
-	local previous
+	local previous, runs = nil, {}
 	for _, start in ipairs(boundaries) do
 		if previous and start > previous then
 			local mask = bit32.bor(GetParagraphStyleMarkup(paragraph_style),
 				document:largeCharacterStyleAt(previous))
 			local selected = selection_start and selection_end and
 				previous >= selection_start and previous < selection_end
-			setLargeTextStyle(mask, selected)
-			Write(x + document:textCellOffset(first, previous), y,
-				document._textbuffer:slice(previous, start - previous))
+			runs[#runs+1] = {first=previous, finish=start, mask=mask,
+				selected=not not selected}
 		end
 		previous = start
+	end
+	return runs
+end
+
+local function drawLargeTextRange(document, x, y, first, finish,
+		selection_start, selection_end, paragraph_style)
+	for _, run in ipairs(BuildLargeTextStyleRuns(document, first, finish,
+			selection_start, selection_end, paragraph_style)) do
+		setLargeTextStyle(run.mask, run.selected)
+		Write(x + document:textCellOffset(first, run.first), y,
+			document._textbuffer:slice(run.first, run.finish - run.first))
 	end
 	SetNormal()
 end

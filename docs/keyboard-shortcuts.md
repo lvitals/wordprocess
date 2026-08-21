@@ -77,7 +77,7 @@ conventional shortcut by default.
 | `Ctrl-P` | Choose a paragraph style |
 | `Space` | Insert a space |
 | `Enter` | Start a new paragraph |
-| `Tab` | Insert a tabulation when Tab insertion is enabled |
+| `Ctrl-T` | Insert a tabulation when Tab insertion is enabled |
 
 Text-entry keys, `Escape`, `Menu`, and the keys used to operate menus and
 dialogs are handled directly and cannot be reassigned as menu shortcuts.
@@ -198,7 +198,9 @@ the key is used, so copy IDs from `ListMenuItems()` exactly.
 
 - `wp` receives the key sequences exposed by ncurses and the terminal. Some
   terminals cannot distinguish Shift/Ctrl plus arrows, function-key modifiers,
-  `Ctrl-Space`, or `Tab` from `Ctrl-I`.
+  `Ctrl-Space`, or `Tab` from `Ctrl-I`. WordProcess reserves that shared code
+  for italic in the editor; use `Ctrl-T` to insert a tabulation. Inside forms,
+  Tab and Shift-Tab continue to move focus.
 - `xwp` generally distinguishes more modifier combinations, but operating
   system and keyboard-layout reservations still apply.
 - If a shortcut does nothing, open the keyboard reference to see its active
