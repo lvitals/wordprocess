@@ -1159,6 +1159,26 @@ function Cmd.SelectWord()
 		Cmd.GotoEndOfWord()
 end
 
+function Cmd.SelectAll()
+	Cmd.UnsetMark()
+	if currentDocument:usesTextBuffer() then
+		currentDocument._textmark = 0
+		currentDocument.mp = 1
+		currentDocument.sticky_selection = false
+		currentDocument._textpos = currentDocument._textbuffer:size()
+		currentDocument._textline = currentDocument:getLineCount()
+		currentDocument._texttop = currentDocument:textLineBounds(
+			currentDocument._textpos)
+		currentDocument._texttopline = currentDocument._textline
+		QueueRedraw()
+		return true
+	end
+	currentDocument.cp, currentDocument.cw, currentDocument.co = 1, 1, 1
+	Cmd.SetMark()
+	currentDocument.sticky_selection = false
+	return Cmd.GotoEndOfDocument()
+end
+
 function Cmd.ChangeDocument(name)
 	if not documentSet:findDocument(name) then
 		return false

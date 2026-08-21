@@ -57,6 +57,7 @@ The names below use `Ctrl`, `Alt`, and `Shift`. A slash separates alternatives;
 | `Page Up` / `Page Down` | Move one viewport page up/down |
 | `Shift` plus any movement above | Select to the movement destination |
 | `Ctrl-W` | Select the current word |
+| `Ctrl-A` | Select the entire current document |
 | `Ctrl-Space` or `Ctrl-@` | Toggle the selection mark |
 | `Backspace` / `Delete` | Delete the selection or previous/next character |
 | `Ctrl-E` | Delete a word |

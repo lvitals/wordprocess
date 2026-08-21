@@ -489,6 +489,12 @@ AssertEquals(true, endStatus:find(string.format("%d words",
 	currentDocument:ensureDocumentIndex().wordCount), 1, true) ~= nil)
 AssertEquals(true, endStatus:find("Pg: 1/1", 1, true) ~= nil)
 AssertEquals(true, endStatus:find("L:3", 1, true) ~= nil)
+AssertEquals("Select all", GetShortcutActionLabel("^A"))
+AssertEquals(true, Cmd.SelectAll())
+local selectAllFirst, selectAllLast = currentDocument:textSelection()
+AssertEquals(0, selectAllFirst)
+AssertEquals(currentDocument._textbuffer:size(), selectAllLast)
+AssertEquals(true, Cmd.UnsetMark())
 AssertEquals(true, Cmd.ExitNavigationMode())
 for _ = 1, 100 do
 	Cmd.GotoEndOfDocument()

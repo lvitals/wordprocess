@@ -19,7 +19,7 @@ wordprocess_tests = [
   'load-compatibility-09', 'load-failed', 'lowlevelclipboard', 'margin-mode-persistence',
   'move-while-selected',
   'numbered-lists', 'page-layout', 'page-navigation', 'parse-string-into-words', 'save-format-escaped-strings',
-  'scrollbar', 'simple-editing', 'smartquotes-selection', 'smartquotes-typing',
+  'scrollbar', 'selection-shortcuts', 'simple-editing', 'smartquotes-selection', 'smartquotes-typing',
   'spellchecker', 'tab-insertion', 'tableio', 'textbuffer', 'type-while-selected', 'undo', 'utf8', 'utils',
   'weirdness-cannot-save-settings', 'weirdness-combining-words',
   'weirdness-delete-word', 'weirdness-deletion-with-multiple-spaces',

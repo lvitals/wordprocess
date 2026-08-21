@@ -166,7 +166,7 @@ function Cmd.ShowKeyboardHelp()
 		{"Ctrl-Z", "^Z"}, {"Ctrl-Y", "^Y"},
 		{"Ctrl-F", "^F"}, {"Ctrl-K", "^K"}, {"Ctrl-R", "^R"},
 		{"Ctrl-G", "^G"}, {"Ctrl-E", "^E"}, {"Ctrl-W", "^W"},
-		{"Ctrl-B", "^B"}, {"Ctrl-I", "^I"}, {"Ctrl-T", "^T"},
+		{"Ctrl-A", "^A"}, {"Ctrl-B", "^B"}, {"Ctrl-I", "^I"}, {"Ctrl-T", "^T"},
 		{"Ctrl-U", "^U"},
 		{"Ctrl-N", "^N"}, {"Ctrl-P", "^P"}, {"Ctrl-@", "^@"},
 	}

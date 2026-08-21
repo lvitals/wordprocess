@@ -19,6 +19,7 @@ customise bindings, see [Keyboard shortcuts](keyboard-shortcuts.md).
 | Page Up / Page Down | Move by viewport page |
 | Shift plus movement | Extend the selection |
 | Ctrl-W | Select the current word |
+| Ctrl-A | Select the entire current document |
 | Ctrl-Space | Toggle the selection mark |
 | Backspace / Delete | Delete the selection or adjacent character |
 | Ctrl-E | Delete a word |
