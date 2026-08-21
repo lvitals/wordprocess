@@ -68,6 +68,16 @@ end
 local CM_TO_PT = 72 / 2.54
 local SPECIAL_STYLES = {Q=true, N=true, C=true}
 
+-- The editor renders on a character-cell grid. Convert the physical line
+-- spacing to the nearest representable number of rows so page-layout changes
+-- are visible while editing as well as in pagination and exported documents.
+function GetDocumentLineHeightRows(document, style)
+	local layout = GetDocumentPageLayout(document)
+	local spacing = SPECIAL_STYLES[style] and layout.specialLineSpacing or
+		layout.lineSpacing
+	return math.max(1, math.floor(spacing + 0.5))
+end
+
 local function layoutsignature(document)
 	local l = GetDocumentPageLayout(document)
 	return table.concat({l.pageWidthCm, l.pageHeightCm, l.marginTopCm,

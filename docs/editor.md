@@ -29,7 +29,7 @@ customise bindings, see [Keyboard shortcuts](keyboard-shortcuts.md).
 | Ctrl-R | Replace, then find the next match |
 | Ctrl-G | Open Go To: H1–H4 contents, physical page, line, or percentage |
 | Ctrl-I / Ctrl-U / Ctrl-B / Ctrl-N | Italic, underline, bold, or normal |
-| Ctrl-T | Insert a tabulation when enabled |
+| Tab / Ctrl-T | Insert a tabulation when enabled |
 | Ctrl-P | Choose a paragraph style |
 | Ctrl-L | Find the next misspelt word |
 | Ctrl-M | Add the current word to the user dictionary |

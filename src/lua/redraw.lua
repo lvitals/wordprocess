@@ -411,16 +411,21 @@ local function rowoffsetfromtop(topp, topw, cp, cw, co, height)
 		if not cline or (cline < topline) then
 			return nil
 		end
-		row = cline - topline
+		row = (cline - topline) *
+			GetDocumentLineHeightRows(currentDocument, topparagraph.style)
 	else
-		row = (#topparagraph:wrap().lines - topline) + 1 + currentDocument:spaceBelow(topp)
+		row = ((#topparagraph:wrap().lines - topline) + 1) *
+			GetDocumentLineHeightRows(currentDocument, topparagraph.style) +
+			currentDocument:spaceBelow(topp)
 
 		for p = topp + 1, cp - 1 do
 			local paragraph = currentDocument[p]
 			if not paragraph then
 				return nil
 			end
-			row = row + #paragraph:wrap().lines + currentDocument:spaceBelow(p)
+			row = row + #paragraph:wrap().lines *
+				GetDocumentLineHeightRows(currentDocument, paragraph.style) +
+				currentDocument:spaceBelow(p)
 			if row >= height then
 				return nil
 			end
@@ -434,7 +439,8 @@ local function rowoffsetfromtop(topp, topw, cp, cw, co, height)
 		if not cline then
 			return nil
 		end
-		row = row + (cline - 1)
+		row = row + (cline - 1) *
+			GetDocumentLineHeightRows(currentDocument, cparagraph.style)
 	end
 
 	if (row < 0) or (row >= height) then
@@ -741,9 +747,14 @@ function RedrawScreen()
 			local lines_before = 0
 			for p = 1, cp - 1 do
 				local wd = currentDocument[p]:wrap()
-				lines_before = lines_before + #wd.lines + currentDocument:spaceBelow(p)
+				lines_before = lines_before + #wd.lines *
+					GetDocumentLineHeightRows(currentDocument,
+						currentDocument[p].style) + currentDocument:spaceBelow(p)
 			end
-			lines_before = lines_before + currentDocument[cp]:getLineOfWord(cw, co) - 1
+			lines_before = lines_before +
+				(currentDocument[cp]:getLineOfWord(cw, co) - 1) *
+				GetDocumentLineHeightRows(currentDocument,
+					currentDocument[cp].style)
 
 			if (min_y + lines_before) <= max_y then
 				cy = min_y + lines_before
@@ -800,7 +811,9 @@ function RedrawScreen()
 		end
 
 		local cl_cp = currentDocument[cp]:getLineOfWord(cw, co)
-		local y_cp = cy - (cl_cp - 1)
+		local current_lineheight = GetDocumentLineHeightRows(currentDocument,
+			currentDocument[cp].style)
+		local y_cp = cy - (cl_cp - 1) * current_lineheight
 
 		-- Draw backwards from cp - 1
 		local y = y_cp - 1 - currentDocument:spaceAbove(cp)
@@ -815,6 +828,8 @@ function RedrawScreen()
 			end
 
 			local wd = paragraph:wrap()
+			local lineheight = GetDocumentLineHeightRows(currentDocument,
+				paragraph.style)
 			for ln = #wd.lines, 1, -1 do
 				local l = wd.lines[ln]
 				drawline_fixed(paragraph, l, ln, y, pn)
@@ -823,7 +838,7 @@ function RedrawScreen()
 					currentDocument._topp = pn
 					currentDocument._topw = l.wn
 				end
-				y = y - 1
+				y = y - lineheight
 				if y < min_y then
 					break
 				end
@@ -844,6 +859,8 @@ function RedrawScreen()
 			end
 
 			local wd = paragraph:wrap()
+			local lineheight = GetDocumentLineHeightRows(currentDocument,
+				paragraph.style)
 			for ln, l in ipairs(wd.lines) do
 				drawline_fixed(paragraph, l, ln, y, pn)
 
@@ -855,7 +872,7 @@ function RedrawScreen()
 					currentDocument._botp = pn
 					currentDocument._botw = l.wn
 				end
-				y = y + 1
+				y = y + lineheight
 				if y > max_y then
 					break
 				end
@@ -901,16 +918,22 @@ function RedrawScreen()
 			sl = #paragraph:wrap().lines
 		end
 		assert(sl)
+		local startlineheight = GetDocumentLineHeightRows(currentDocument,
+			paragraph.style)
 
-		local cy = math.floor(ScreenHeight / 2) - sl
+		local cy = math.floor(ScreenHeight / 2) - sl * startlineheight
 		if cp >= sp then
 			local p = sp
 			while p < cp do
 				local wd = currentDocument[p]:wrap()
-				cy = cy + #wd.lines + currentDocument:spaceBelow(p)
+				cy = cy + #wd.lines * GetDocumentLineHeightRows(
+					currentDocument, currentDocument[p].style) +
+					currentDocument:spaceBelow(p)
 				p = p + 1
 			end
-			cy = cy + currentDocument[p]:getLineOfWord(cw, co) - 1
+			cy = cy + (currentDocument[p]:getLineOfWord(cw, co) - 1) *
+				GetDocumentLineHeightRows(currentDocument,
+					currentDocument[p].style)
 			if cy >= (ScreenHeight - 5) then
 				currentDocument._sp = cp
 				currentDocument._sw = cw
@@ -921,9 +944,13 @@ function RedrawScreen()
 			while p > cp do
 				p = p - 1
 				local wd = currentDocument[p]:wrap()
-				cy = cy - #wd.lines - currentDocument:spaceBelow(p)
+				cy = cy - #wd.lines * GetDocumentLineHeightRows(
+					currentDocument, currentDocument[p].style) -
+					currentDocument:spaceBelow(p)
 			end
-			cy = cy + currentDocument[p]:getLineOfWord(cw, co) - 1
+			cy = cy + (currentDocument[p]:getLineOfWord(cw, co) - 1) *
+				GetDocumentLineHeightRows(currentDocument,
+					currentDocument[p].style)
 			if cy < 4 then
 				currentDocument._sp = cp
 				currentDocument._sw = cw
@@ -981,7 +1008,7 @@ function RedrawScreen()
 		-- Draw backwards from sp - 1
 		local pn = sp - 1
 		local sa = currentDocument:spaceAbove(sp)
-		local y = math.floor(ScreenHeight / 2) - sl - 1 - sa
+		local y = math.floor(ScreenHeight / 2) - sl * startlineheight - 1 - sa
 		local paragraph = currentDocument[sp]
 		if paragraph then
 			SetColour(Palette.Paper, Palette.Paper)
@@ -998,13 +1025,15 @@ function RedrawScreen()
 			end
 
 			local wd = paragraph:wrap()
+			local lineheight = GetDocumentLineHeightRows(currentDocument,
+				paragraph.style)
 			for ln = #wd.lines, 1, -1 do
 				local l = wd.lines[ln]
 				drawline_jump(paragraph, l, ln, y, pn)
 
 				currentDocument._topp = pn
 				currentDocument._topw = l.wn
-				y = y - 1
+				y = y - lineheight
 
 				if (y < 0) then
 					break
@@ -1023,7 +1052,7 @@ function RedrawScreen()
 		end
 
 		-- Draw forwards from sp
-		y = math.floor(ScreenHeight / 2) - sl
+		y = math.floor(ScreenHeight / 2) - sl * startlineheight
 		pn = sp
 		while (y < status_y) do
 			local paragraph = currentDocument[pn]
@@ -1034,6 +1063,8 @@ function RedrawScreen()
 			drawmargin(y, pn, paragraph)
 
 			local wd = paragraph:wrap()
+			local lineheight = GetDocumentLineHeightRows(currentDocument,
+				paragraph.style)
 			for ln, l in ipairs(wd.lines) do
 				drawline_jump(paragraph, l, ln, y, pn)
 
@@ -1044,7 +1075,7 @@ function RedrawScreen()
 
 				currentDocument._botp = pn
 				currentDocument._botw = l.wn
-				y = y + 1
+				y = y + lineheight
 
 				if (y >= status_y) then
 					break

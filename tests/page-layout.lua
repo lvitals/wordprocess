@@ -12,6 +12,15 @@ AssertEquals(1.5, layout.lineSpacing)
 AssertEquals(10, layout.specialFontSizePt)
 AssertEquals(1.0, layout.specialLineSpacing)
 AssertEquals(76, GetDocumentTextWidthColumns(currentDocument))
+AssertEquals(2, GetDocumentLineHeightRows(currentDocument, "P"))
+AssertEquals(1, GetDocumentLineHeightRows(currentDocument, "Q"))
+
+-- Page layout controls vertical editor spacing without changing the separate
+-- first-line indentation preference.
+GlobalSettings.lookandfeel.firstlineindent = false
+UpdateDocumentStyles()
+AssertEquals(0, documentStyles.P.firstindent)
+AssertEquals(2, GetDocumentLineHeightRows(currentDocument, "P"))
 
 local latex = Cmd.ExportToLatexString()
 if not latex:find("paperwidth=21.0cm,paperheight=29.7cm", 1, true) then

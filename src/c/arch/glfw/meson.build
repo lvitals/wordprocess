@@ -20,8 +20,20 @@ font_table_h = custom_target('font_table.h',
   capture: true,
 )
 
+# Keep the installed desktop icon and the GLFW window icon derived from the
+# same vector source. GLFW consumes RGBA pixels, so rasterise a deterministic
+# 128x128 PNG at build time; a Windows .ico container is neither used nor
+# understood by glfwSetWindowIcon().
+rsvg_convert = find_program('rsvg-convert')
+window_icon_png = custom_target('wordprocess-window-icon.png',
+  input: meson.project_source_root() / 'extras/wordprocess.svg',
+  output: 'wordprocess-window-icon.png',
+  command: [rsvg_convert, '--width', '128', '--height', '128',
+            '--output', '@OUTPUT@', '@INPUT@'],
+)
+
 icon_c = custom_target('icon.c',
-  input: meson.project_source_root() / 'extras/icon.png',
+  input: window_icon_png,
   output: 'icon.c',
   command: [find_program('python3'),
             meson.project_source_root() / 'tools/makeicon.py', '@INPUT@'],

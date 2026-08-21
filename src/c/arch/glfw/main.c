@@ -314,6 +314,17 @@ void dpy_start(void)
         exit(1);
     }
 
+    /* Let desktop environments associate this window with
+     * wordprocess.desktop.  Wayland intentionally ignores
+     * glfwSetWindowIcon() and resolves the icon from this application ID. */
+#ifdef GLFW_WAYLAND_APP_ID
+    glfwWindowHintString(GLFW_WAYLAND_APP_ID, "wordprocess");
+#endif
+#ifdef GLFW_X11_CLASS_NAME
+    glfwWindowHintString(GLFW_X11_CLASS_NAME, "WordProcess");
+    glfwWindowHintString(GLFW_X11_INSTANCE_NAME, "wordprocess");
+#endif
+
     window = glfwCreateWindow(get_ivar("window_width"),
         get_ivar("window_height"),
         "WordProcess",

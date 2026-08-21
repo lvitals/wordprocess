@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:dc="http://purl.org/dc/elements/1.1/"
+     xmlns:cc="http://creativecommons.org/ns#"
+     xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+     width="1024" height="1024" viewBox="0 0 1024 1024"
+     preserveAspectRatio="xMidYMid meet"
+     role="img" aria-labelledby="title description"
+     focusable="false">
+  <title id="title">WordProcess</title>
+  <desc id="description">Blue fountain pen nib inside a circular border</desc>
+  <metadata>
+    <rdf:RDF>
+      <cc:Work rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+        <dc:title>WordProcess application icon</dc:title>
+        <dc:description>Scalable vector icon for the WordProcess editor</dc:description>
+        <dc:creator>WordProcess contributors</dc:creator>
+        <cc:license rdf:resource="https://opensource.org/license/mit/"/>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+
+  <!-- Transparent background; geometry is centred in a square application-icon canvas. -->
+  <!-- Scale the unchanged artwork to the optical footprint commonly used by
+       KDE application icons, retaining a small transparent safety margin. -->
+  <g transform="translate(512 512) scale(1.08) translate(-512 -512)"
+     shape-rendering="geometricPrecision">
+
+  <!-- Outer circular border -->
+  <circle cx="512" cy="512" r="451"
+          fill="none"
+          stroke="#155AA7"
+          stroke-width="24"/>
+
+  <!-- Inner light-blue disc -->
+  <circle cx="512" cy="512" r="309"
+          fill="#B8D8F5"/>
+
+  <!-- Fountain-pen nib, left half -->
+  <path d="
+    M 512 205
+    C 505 230, 489 264, 466 309
+    C 442 357, 414 412, 392 466
+    C 381 493, 377 514, 380 539
+    L 401 746
+    C 435 736, 470 731, 512 731
+    Z"
+    fill="#0B63C7"/>
+
+  <!-- Fountain-pen nib, right half -->
+  <path d="
+    M 512 205
+    C 519 230, 535 264, 558 309
+    C 582 357, 610 412, 632 466
+    C 643 493, 647 514, 644 539
+    L 623 746
+    C 589 736, 554 731, 512 731
+    Z"
+    fill="#06468E"/>
+
+  <!-- Rounded top of nib -->
+  <circle cx="512" cy="205" r="23" fill="#0B63C7"/>
+  <path d="M512 182 A23 23 0 0 1 512 228 Z" fill="#06468E"/>
+
+  <!-- Nib slit -->
+  <rect x="506" y="201" width="12" height="265" rx="6"
+        fill="#B8D8F5"/>
+
+  <!-- Breather hole -->
+  <circle cx="512" cy="497" r="31" fill="#B8D8F5"/>
+
+  <!-- Pen body / grip -->
+  <path d="
+    M 402 735
+    C 400 723, 408 715, 421 712
+    C 479 700, 545 700, 603 712
+    C 616 715, 624 723, 622 735
+    L 612 894
+    C 578 906, 548 912, 512 912
+    C 476 912, 446 906, 412 894
+    Z"
+    fill="#0B63C7"/>
+
+  <!-- Slight darker right-side body shading -->
+  <path d="
+    M 512 704
+    C 544 704, 575 706, 603 712
+    C 616 715, 624 723, 622 735
+    L 612 894
+    C 578 906, 548 912, 512 912
+    Z"
+    fill="#0752A7"
+    opacity="0.42"/>
+  </g>
+</svg>
