@@ -94,6 +94,7 @@ function Cmd.ConfigurePageLayout()
 		local field = Form.TextField {
 			x1 = -11, y1 = y, x2 = -1, y2 = y,
 			value = tostring(layout[spec[2]]),
+			numeric = true,
 		}
 		fields[spec[2]] = field
 		widgets[#widgets+1] = Form.Label {

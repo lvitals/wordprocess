@@ -40,21 +40,24 @@ function Cmd.ConfigureGui()
 		Form.TextField {
 			x1 = L, y1 = 1,
 			x2 = L+10, y2 = 1,
-			value = tostring(settings.window_width)
+			value = tostring(settings.window_width),
+			numeric = true,
 		}
 
 	local windowheight_textfield =
 		Form.TextField {
 			x1 = L, y1 = 3,
 			x2 = L+10, y2 = 3,
-			value = tostring(settings.window_height)
+			value = tostring(settings.window_height),
+			numeric = true,
 		}
 
 	local fontsize_textfield =
 		Form.TextField {
 			x1 = L, y1 = 5,
 			x2 = L+10, y2 = 5,
-			value = tostring(settings.font_size)
+			value = tostring(settings.font_size),
+			numeric = true,
 		}
 
 	local fontregular_textfield =
@@ -210,4 +213,3 @@ function Cmd.ConfigureGui()
 
 	return true
 end
-

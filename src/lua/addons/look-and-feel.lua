@@ -183,7 +183,8 @@ function Cmd.ConfigureLookAndFeel()
 		Form.TextField {
 			x1 = -11, y1 = 3,
 			x2 = -1, y2 = 3,
-			value = tostring(settings.maxwidth)
+			value = tostring(settings.maxwidth),
+			numeric = true,
 		}
 
 	local terminators_checkbox =
@@ -257,7 +258,8 @@ function Cmd.ConfigureLookAndFeel()
 		Form.TextField {
 			x1 = -11, y1 = 21,
 			x2 = -1, y2 = 21,
-			value = tostring(settings.tabwidth)
+			value = tostring(settings.tabwidth),
+			numeric = true,
 		}
 
 	local dialogue=

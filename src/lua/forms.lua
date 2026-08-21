@@ -93,6 +93,15 @@ Form.Label = Label
 local checkbox_toggle = function(self, key)
 end
 
+local function set_checkbox(self, value)
+	if self.value ~= value then
+		self.value = value
+		self:changed()
+		self:draw()
+	end
+	return "nop"
+end
+
 local Checkbox= Form.Widget {
 	value = false,
 	label = "Checkbox",
@@ -122,10 +131,32 @@ local Checkbox= Form.Widget {
 		self:changed()
 		self:draw()
 	end,
+	["h"] = function(self) return set_checkbox(self, false) end,
+	["H"] = function(self) return set_checkbox(self, false) end,
+	["l"] = function(self) return set_checkbox(self, true) end,
+	["L"] = function(self) return set_checkbox(self, true) end,
 }
 Form.Checkbox = Checkbox
 
 --- ToggleWidget ------------------------------------------------------------
+
+local function toggle_left(self, key)
+	if self.value ~= 1 then
+		self.value = self.value - 1
+		self:changed()
+		self:draw()
+	end
+	return "nop"
+end
+
+local function toggle_right(self, key)
+	if self.value ~= #self.values then
+		self.value = self.value + 1
+		self:changed()
+		self:draw()
+	end
+	return "nop"
+end
 
 local Toggle= Form.Widget {
 	values = {"Default"},
@@ -162,23 +193,13 @@ local Toggle= Form.Widget {
 		end
 	end,
 
-	["KEY_LEFT"] = function(self, key)
-		if self.value ~= 1 then
-			self.value = self.value - 1
-			self:changed()
-			self:draw()
-		end
-		return "nop"
-	end,
+	["KEY_LEFT"] = toggle_left,
+	["h"] = toggle_left,
+	["H"] = toggle_left,
 
-	["KEY_RIGHT"] = function(self, key)
-		if self.value ~= #self.values then
-			self.value = self.value + 1
-			self:changed()
-			self:draw()
-		end
-		return "nop"
-	end,
+	["KEY_RIGHT"] = toggle_right,
+	["l"] = toggle_right,
+	["L"] = toggle_right,
 
 	[" "] = function(self, key)
 		self.value = self.value + 1
@@ -206,8 +227,17 @@ local function discard_transient_textfield(self)
 	end
 end
 
+local function textfield_vim_horizontal(self, key)
+	if self.numeric then
+		local arrow = ((key == "h") or (key == "H")) and "KEY_LEFT" or "KEY_RIGHT"
+		return self[arrow](self, arrow)
+	end
+	return self:key(key)
+end
+
 local TextField= Form.Widget {
 	focusable = true,
+	accepts_text = true,
 	transient = false,
 
 	init = function(self)
@@ -282,6 +312,11 @@ local TextField= Form.Widget {
 		return "nop"
 	end,
 
+	["h"] = textfield_vim_horizontal,
+	["H"] = textfield_vim_horizontal,
+	["l"] = textfield_vim_horizontal,
+	["L"] = textfield_vim_horizontal,
+
 	["KEY_HOME"] = function(self, key)
 		keep_transient_textfield(self)
 		self.cursor = 1
@@ -355,6 +390,9 @@ local TextField= Form.Widget {
 
 	key = function(self, key)
 		if not key:match("^KEY_") then
+			if self.numeric and not key:match("^[0-9eE%+%-%.]$") then
+				return "nop"
+			end
 			discard_transient_textfield(self)
 			self.value = self.value:sub(1, self.cursor-1) .. key .. self.value:sub(self.cursor)
 			self.cursor = self.cursor + GetBytesOfCharacter(key:byte(1))
@@ -549,6 +587,29 @@ local standard_actions=
 		return "nop"
 	end
 }
+
+Browser["j"] = Browser["KEY_DOWN"]
+Browser["J"] = Browser["KEY_DOWN"]
+Browser["k"] = Browser["KEY_UP"]
+Browser["K"] = Browser["KEY_UP"]
+Browser["h"] = Browser["KEY_PGUP"]
+Browser["H"] = Browser["KEY_PGUP"]
+Browser["l"] = Browser["KEY_PGDN"]
+Browser["L"] = Browser["KEY_PGDN"]
+
+local function vim_focus(form, key)
+	local widget = form.focus and form.widgets[form.focus]
+	if widget and widget.accepts_text and not widget.numeric then
+		return nil
+	end
+	local arrow = ((key == "j") or (key == "J")) and "KEY_DOWN" or "KEY_UP"
+	return standard_actions[arrow](form, arrow)
+end
+
+standard_actions["j"] = vim_focus
+standard_actions["J"] = vim_focus
+standard_actions["k"] = vim_focus
+standard_actions["K"] = vim_focus
 Form.Browser = Browser
 
 local function resolvesize(size, bound)

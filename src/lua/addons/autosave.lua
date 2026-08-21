@@ -137,7 +137,8 @@ function Cmd.ConfigureAutosave()
 		Form.TextField {
 			x1 = 33, y1 = 3,
 			x2 = -1, y2 = 3,
-			value = tostring(settings.period)
+			value = tostring(settings.period),
+			numeric = true,
 		}
 
 	local example_label =

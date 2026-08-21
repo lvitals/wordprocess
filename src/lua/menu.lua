@@ -17,6 +17,7 @@ local GetStringWidth = wg.getstringwidth
 local menu_tab = {}
 local key_tab= {}
 local menu_stack= {}
+local menu_navigation_keys = {H=true, J=true, K=true, L=true}
 
 local UseUnicode = wg.useunicode
 
@@ -46,6 +47,9 @@ function CreateMenu(n, m, replaces)
 		menu[#menu+1] = item
 
 		if item.mk then
+			if menu_navigation_keys[item.mk:upper()] then
+				error("Menu action key "..item.mk.." is reserved for H/J/K/L navigation")
+			end
 			if menu.mks[item.mk] then
 				error("Duplicate menu action key "..item.mk)
 			end
@@ -130,7 +134,7 @@ local separator= { label = "-" }
 local ImportMenu = CreateMenu("Import new document",
 {
 	E("FIodt",  "O", "Import ODT file...",        nil,         Cmd.ImportODTFile),
-	E("FIhtml", "H", "Import HTML file...",       nil,         Cmd.ImportHTMLFile),
+	E("FIhtml", "B", "Import HTML file...",       nil,         Cmd.ImportHTMLFile),
 	E("FImd",   "M", "Import Markdown file...",   nil,         Cmd.ImportMarkdownFile),
 	E("FItxt",  "T", "Import text file...",       nil,         Cmd.ImportTextFile),
 })
@@ -138,10 +142,10 @@ local ImportMenu = CreateMenu("Import new document",
 local ExportMenu = CreateMenu("Export current document",
 {
 	E("FEodt",  "O", "Export to ODT...",          nil,         Cmd.ExportODTFile),
-	E("FEhtml", "H", "Export to HTML...",         nil,         Cmd.ExportHTMLFile),
+	E("FEhtml", "B", "Export to HTML...",         nil,         Cmd.ExportHTMLFile),
 	E("FEmd",   "M", "Export to Markdown...",     nil,         Cmd.ExportMarkdownFile),
 	E("FEtxt",  "T", "Export to plain text...",   nil,         Cmd.ExportTextFile),
-	E("FEtex",  "L", "Export to LaTeX...",        nil,         Cmd.ExportLatexFile),
+	E("FEtex",  "X", "Export to LaTeX...",        nil,         Cmd.ExportLatexFile),
 	E("FEtr",   "F", "Export to Troff...",        nil,         Cmd.ExportTroffFile),
 	E("FEorg",  "E", "Export to Emacs Org...",    nil,         Cmd.ExportOrgFile),
 --	{"FErtf",  "R", "Export to Rtf...",          nil,         Cmd.ExportRTFFile},
@@ -151,16 +155,16 @@ local DocumentSettingsMenu = CreateMenu("Document settings",
 {
     E("FSautosave",     "A", "Autosave...",       nil,         Cmd.ConfigureAutosave),
     E("FSscrapbook",    "S", "Scrapbook...",      nil,         Cmd.ConfigureScrapbook),
-    E("FSHTMLExport",   "H", "HTML export...",    nil,         Cmd.ConfigureHTMLExport),
+    E("FSHTMLExport",   "E", "HTML export...",    nil,         Cmd.ConfigureHTMLExport),
 	E("FSPageCount",    "P", "Page count...",     nil,         Cmd.ConfigurePageCount),
 	E("FSSmartquotes",  "Q", "Smart quotes...",   nil,         Cmd.ConfigureSmartQuotes),
-	E("FSSpellchecker", "K", "Spellchecker...",   nil,         Cmd.ConfigureSpellchecker),
+	E("FSSpellchecker", "C", "Spellchecker...",   nil,         Cmd.ConfigureSpellchecker),
 })
 
 local GlobalSettingsMenu = CreateMenu("Global settings",
 {
 	E("FSgui",         "G", "Configure GUI...",              nil,   Cmd.ConfigureGui),
-	E("FSlookandfeel", "L", "Change look and feel...",       nil,   Cmd.ConfigureLookAndFeel),
+	E("FSlookandfeel", "C", "Change look and feel...",       nil,   Cmd.ConfigureLookAndFeel),
 	E("FSPageLayout",  "P", "Page layout...",                nil,   Cmd.ConfigurePageLayout),
 	E("FSDictionary",  "D", "Load new system dictionary...", nil,   Cmd.ConfigureSystemDictionary),
 	E("FSdirectories", "R", "Change directories...",         nil,   Cmd.ConfigureDirectories),
@@ -222,12 +226,12 @@ local EditMenu = CreateMenu("Edit",
 	separator,
 	E("EG",         "G", "Go to...",                  "^G",        Cmd.Goto),
 	M("Escrapbook", "S", "Scrapbook >",               nil,         ScrapbookMenu),
-	M("Espell",     "K", "Spellchecker >",            nil,         SpellcheckMenu),
+	M("Espell",     "B", "Spellchecker >",            nil,         SpellcheckMenu),
 })
 
 local MarginMenu = CreateMenu("Margin",
 {
-	E("SM1",    "H", "Hide margin",                nil,         function() return Cmd.SetViewMode(1) end),
+	E("SM1",    "M", "Hide margin",                nil,         function() return Cmd.SetViewMode(1) end),
 	E("SM2",    "S", "Show paragraph styles",      nil,         function() return Cmd.SetViewMode(2) end),
 	E("SM3",    "N", "Show paragraph numbers",     nil,         function() return Cmd.SetViewMode(3) end),
 	E("SM4",    "W", "Show paragraph word counts", nil,         function() return Cmd.SetViewMode(4) end),
@@ -317,10 +321,24 @@ function MenuTree.activate(self, menu)
 	SetNormal()
 end
 
+local compact_shortcuts = {
+	ZU="A^K", ZR="A^L", ZD="A^J", ZL="A^H",
+	ZPTAB="A^I", ZNTAB="A^O", ZDPARA="AS^D",
+}
+
+local function getDisplayedAccelerator(self, item)
+	local accelerator = self.accelerators[item.id]
+	local compact = compact_shortcuts[item.id]
+	if accelerator and compact then
+		return accelerator.." / "..compact
+	end
+	return accelerator or compact
+end
+
 function MenuTree.drawmenu(self, x, y, menu, n, top)
 	local akw = 0
 	for _, item in ipairs(menu) do
-		local ak = self.accelerators[item.id]
+		local ak = getDisplayedAccelerator(self, item)
 		if ak then
 			local l = GetStringWidth(ak)
 			if (akw < l) then
@@ -352,7 +370,7 @@ function MenuTree.drawmenu(self, x, y, menu, n, top)
 
 	for i = top, top+visiblelen-1 do
 		local item = menu[i]
-		local ak = self.accelerators[item.id]
+		local ak = getDisplayedAccelerator(self, item)
 		local yy = y+i-top+1
 
 		if (item.label == "-") then
@@ -633,6 +651,16 @@ function CreateMenuTree()
 	return (setmetatable(m, MenuTree))
 end
 
+local function menuShortcutForIndex(index)
+	if index <= 10 then
+		return tostring(index - 1)
+	end
+
+	-- H/J/K/L are reserved for menu navigation.
+	local letters = "ABCDEFGIMNOPQRSTUVWXYZ"
+	return letters:sub(index - 10, index - 10):match(".")
+end
+
 function RebuildParagraphStylesMenu(styles)
 	submenu(ParagraphStylesMenu)
 
@@ -643,12 +671,7 @@ function RebuildParagraphStylesMenu(styles)
 	while styles[id] do
 		local style = styles[id]
 
-		local shortcut
-		if (id <= 10) then
-			shortcut = tostring(id - 1)
-		else
-			shortcut = string.char(id + 54)
-		end
+		local shortcut = menuShortcutForIndex(id)
 
 		m[#m+1] = {
 			id = "SP"..id,
@@ -683,12 +706,7 @@ function RebuildDocumentsMenu(documents)
 	local m= {}
 	for id, document in ipairs(documents) do
 		local ak = ak_tab[document.name]
-		local shortcut
-		if (id <= 10) then
-			shortcut = tostring(id - 1)
-		else
-			shortcut = string.char(id + 54)
-		end
+		local shortcut = menuShortcutForIndex(id)
 
 		m[#m+1] = {
 			id = "D"..id,

@@ -8,6 +8,11 @@ line, `H`/`L` to move by page, and `Escape`, `Q`, or `Enter` to close it.
 While any menu is open, `H`/`J`/`K`/`L` navigate left/down/up/right, alongside
 the arrow keys.
 
+In configuration forms, `J`/`K` move between controls and `H`/`L` change the
+selected value. In lists, `H`/`L` move by page. Text fields keep these letters
+available for normal typing. In numeric fields, `J`/`K` change focus and
+`H`/`L` move the text cursor, alongside the arrow keys.
+
 The names below use `Ctrl`, `Alt`, and `Shift`. A slash separates alternatives;
 `Shift` combined with a movement extends the selection.
 

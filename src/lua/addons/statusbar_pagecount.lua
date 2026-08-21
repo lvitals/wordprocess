@@ -54,7 +54,8 @@ function Cmd.ConfigurePageCount()
 		Form.TextField {
 			x1 = -11, y1 = 3,
 			x2 = -1, y2 = 3,
-			value = tostring(settings.wordsperpage)
+			value = tostring(settings.wordsperpage),
+			numeric = true,
 		}
 
 	local dialogue=
