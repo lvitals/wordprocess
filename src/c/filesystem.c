@@ -24,6 +24,57 @@ static int pusherrno(lua_State* L)
     return 3;
 }
 
+#define FILE_WRITER_MT "wordprocess.filewriter"
+typedef struct FileWriter { FILE* fp; } FileWriter;
+
+static FileWriter* checkwriter(lua_State* L)
+{
+    return (FileWriter*)luaL_checkudata(L, 1, FILE_WRITER_MT);
+}
+
+static int filewriter_write_cb(lua_State* L)
+{
+    FileWriter* writer = checkwriter(L);
+    luaL_argcheck(L, writer->fp != NULL, 1, "writer is closed");
+    for (int argument = 2; argument <= lua_gettop(L); argument++)
+    {
+        size_t length;
+        const char* data = luaL_checklstring(L, argument, &length);
+        while (length)
+        {
+            size_t written = fwrite(data, 1, length, writer->fp);
+            if (!written) return pusherrno(L);
+            data += written;
+            length -= written;
+        }
+    }
+    lua_pushboolean(L, true);
+    return 1;
+}
+
+static int filewriter_close_cb(lua_State* L)
+{
+    FileWriter* writer = checkwriter(L);
+    if (!writer->fp) { lua_pushboolean(L, true); return 1; }
+    int result = fclose(writer->fp);
+    writer->fp = NULL;
+    if (result != 0) return pusherrno(L);
+    lua_pushboolean(L, true);
+    return 1;
+}
+
+static int openwriter_cb(lua_State* L)
+{
+    const char* filename = luaL_checklstring(L, 1, NULL);
+    FILE* fp = fopen(filename, "wb");
+    if (!fp) return pusherrno(L);
+    FileWriter* writer = (FileWriter*)lua_newuserdata(L, sizeof(*writer));
+    writer->fp = fp;
+    luaL_getmetatable(L, FILE_WRITER_MT);
+    lua_setmetatable(L, -2);
+    return 1;
+}
+
 #ifdef WIN32
 static void createUuid(char* buf, size_t buflen)
 {
@@ -139,6 +190,33 @@ static int rename_cb(lua_State* L)
     if (rename(oldfilename, newfilename) != 0)
         return pusherrno(L);
 
+    lua_pushboolean(L, true);
+    return 1;
+}
+
+static int truncatefile_cb(lua_State* L)
+{
+    const char* filename = luaL_checklstring(L, 1, NULL);
+    lua_Number requested = luaL_checknumber(L, 2);
+    if (requested < 0)
+    {
+        errno = EINVAL;
+        return pusherrno(L);
+    }
+#ifdef WIN32
+    FILE* file = fopen(filename, "wb");
+    if (!file)
+        return pusherrno(L);
+    int result = _chsize_s(_fileno(file), (__int64)requested);
+    int saved = errno;
+    fclose(file);
+    errno = saved;
+    if (result != 0)
+        return pusherrno(L);
+#else
+    if (truncate(filename, (off_t)requested) != 0)
+        return pusherrno(L);
+#endif
     lua_pushboolean(L, true);
     return 1;
 }
@@ -365,6 +443,7 @@ void filesystem_init(void)
         {"mkdir",     mkdir_cb    },
         {"mkdirs",    mkdirs_cb    },
         {"mkdtemp",   mkdtemp_cb  },
+		{"openwriter", openwriter_cb},
         {"printerr",  printerr_cb },
         {"printout",  printout_cb },
         {"readdir",   readdir_cb  },
@@ -372,6 +451,7 @@ void filesystem_init(void)
         {"remove",    remove_cb   },
         {"rename",    rename_cb   },
         {"stat",      stat_cb     },
+        {"truncatefile", truncatefile_cb},
         {"writefile", writefile_cb},
         {NULL,        NULL        }
     };
@@ -386,6 +466,18 @@ void filesystem_init(void)
     lua_getglobal(L, "wg");
     luaL_register(L, NULL, funcs);
     luaL_setconstants(L, consts, sizeof(consts) / sizeof(*consts));
+
+    luaL_newmetatable(L, FILE_WRITER_MT);
+    const static luaL_Reg writer_methods[] = {
+        {"write", filewriter_write_cb},
+        {"close", filewriter_close_cb},
+        {"__gc", filewriter_close_cb},
+        {NULL, NULL}
+    };
+    luaL_register(L, NULL, writer_methods);
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -2, "__index");
+    lua_pop(L, 1);
 }
 
 // vim: sw=4 ts=4 et

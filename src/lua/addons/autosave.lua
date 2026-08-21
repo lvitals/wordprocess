@@ -49,16 +49,25 @@ do
 			settings.lastsaved = os.time()
 		end
 
-		if not documentSet.name and not currentDocument:usesTextBuffer() then
+		if not documentSet.name then
 			ImmediateMessage("Cannot autosave; document set has no name!")
 			return
 		end
 
 		if ((os.time() - settings.lastsaved) > (settings.period * 60)) then
 			if currentDocument:usesTextBuffer() then
-				-- A traditional autosave would create another complete multi-GiB
-				-- file every period. Until a bounded delta journal exists, skip it.
-				NonmodalMessage("Autosave skipped for large text; use Save.")
+				ImmediateMessage("Autosaving edit journal...")
+				local filename = makefilename(settings.pattern)
+				local metadata = SaveToHeaderlessString(documentSet)
+				local saved, journalerror =
+					currentDocument._textbuffer:journal(filename, metadata)
+				if not saved then
+					ModalMessage("Autosave failed", "The edit journal could not be saved: "..
+						tostring(journalerror))
+				else
+					NonmodalMessage("Autosaved recoverable edit journal as "..filename)
+					QueueRedraw()
+				end
 				settings.lastsaved = os.time()
 				return
 			end

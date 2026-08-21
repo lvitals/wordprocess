@@ -187,11 +187,28 @@ local function export_odt_with_ui(filename, title, extension)
 
 	ImmediateMessage("Exporting...")
 
-	local content = {}
-	local writer = function(s)
-		content[#content+1] = s
+	local tempdir, temperror = wg.mkdtemp()
+	if not tempdir then
+		ModalMessage(nil, "Unable to create temporary export storage: "..temperror)
+		return false
 	end
-	callback(writer, currentDocument)
+	local contentfile = tempdir.."/content.xml"
+	local output, openerror = wg.openwriter(contentfile)
+	if not output then
+		wg.remove(tempdir)
+		ModalMessage(nil, "Unable to create content.xml: "..openerror)
+		return false
+	end
+	local ok, exporterror = pcall(callback,
+		function(...) return output:write(...) end, currentDocument)
+	local closed, closeerror = output:close()
+	if not ok or not closed then
+		wg.remove(contentfile)
+		wg.remove(tempdir)
+		ModalMessage(nil, "Unable to export content.xml: "..
+			tostring(exporterror or closeerror))
+		return false
+	end
 
 	local xml =
 	{
@@ -371,12 +388,14 @@ local function export_odt_with_ui(filename, title, extension)
 
 ,
 
-		["content.xml"] = table.concat(content)
+		["content.xml"] = {filename=contentfile}
 	}
 
 	local layout = GetDocumentPageLayout(currentDocument)
-	local lineheight = tostring(layout.lineSpacing * 100).."%"
-	local speciallineheight = tostring(layout.specialLineSpacing * 100).."%"
+	-- These values are used as gsub replacement strings, where a literal
+	-- percent sign must be doubled.
+	local lineheight = tostring(layout.lineSpacing * 100).."%%"
+	local speciallineheight = tostring(layout.specialLineSpacing * 100).."%%"
 	local pagestyles = string_format([[
 			<office:automatic-styles>
 				<style:page-layout style:name="WordProcessPage">
@@ -411,7 +430,10 @@ local function export_odt_with_ui(filename, title, extension)
 		'fo:margin-left="'..tostring(layout.longQuoteIndentCm)..
 		'cm" fo:line-height="'..speciallineheight..'"/>', 1)
 
-	if not writezip(filename, xml) then
+	local zipok = writezip(filename, xml)
+	wg.remove(contentfile)
+	wg.remove(tempdir)
+	if not zipok then
 		ModalMessage(nil, "Unable to open the output file.")
 		QueueRedraw()
 		return false

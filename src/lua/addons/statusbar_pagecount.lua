@@ -9,8 +9,12 @@
 do
 	local function cb(event, token, terms)
 		local settings = documentSet.addons.pagecount or {}
-		if settings.enabled and not currentDocument:usesTextBuffer() then
-			local pages = math.floor((currentDocument.wordcount or 0) / settings.wordsperpage)
+		if settings.enabled then
+			local words = currentDocument:usesTextBuffer() and
+				currentDocument:ensureDocumentIndex().wordCount or
+				currentDocument.wordcount
+			if not words then return end
+			local pages = math.floor(words / settings.wordsperpage)
 			terms[#terms+1] = {
 				priority=80,
 				value=string.format("%d %s", pages,

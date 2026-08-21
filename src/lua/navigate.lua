@@ -374,6 +374,7 @@ end
 function Cmd.InsertStringIntoWord(c)
 	if currentDocument:usesTextBuffer() then
 		currentDocument._textbuffer:insert(currentDocument._textpos, c)
+		currentDocument:adjustLargeStyleSpans(currentDocument._textpos, 0, #c)
 		currentDocument._textpos = currentDocument._textpos + #c
 		currentDocument._textchanged = true
 		documentSet:touch()
@@ -931,8 +932,18 @@ end
 
 function Cmd.SetStyle(s)
 	if currentDocument:usesTextBuffer() then
-		NonmodalMessage("Character styles require conversion to a structured document.")
-		return false
+		local first, last = currentDocument:textSelection()
+		if not first or first == last then
+			NonmodalMessage("Select text before applying a character style.")
+			return false
+		end
+		local style = ({b=wg.BOLD, i=wg.ITALIC, u=wg.UNDERLINE, o=0})[s]
+		if style == nil then return false end
+		currentDocument:addLargeCharacterStyle(first, last, style)
+		currentDocument._textchanged = true
+		documentSet:touch()
+		QueueRedraw()
+		return Cmd.UnsetMark()
 	end
 	if currentDocument.mp then
 		return Cmd.ApplyStyleToSelection(s)
@@ -1000,8 +1011,21 @@ end
 
 function Cmd.ChangeParagraphStyle(style)
 	if currentDocument:usesTextBuffer() then
-		NonmodalMessage("Paragraph styles require conversion to a structured document.")
-		return false
+		if not documentStyles[style] then return false end
+		local first, last = currentDocument:textSelection()
+		if first and last and first ~= last then
+			first = currentDocument:textLineBounds(first)
+			local _, _, line_end = currentDocument:textLineBounds(last)
+			last = math.min(line_end + 1, currentDocument._textbuffer:size())
+		else
+			first, _, last = currentDocument:textLineBounds()
+			last = math.min(last + 1, currentDocument._textbuffer:size())
+		end
+		currentDocument:addLargeParagraphStyle(first, last, style)
+		currentDocument._textchanged = true
+		documentSet:touch()
+		QueueRedraw()
+		return Cmd.UnsetMark()
 	end
 	if not documentStyles[style] then
 		ModalMessage("Unknown paragraph style", "Sorry! I don't recognise that style. (This user interface will be improved.)")
@@ -1134,6 +1158,43 @@ function Cmd.Cut()
 	return Cmd.Copy(true) and Cmd.Delete()
 end
 
+local LARGE_CLIPBOARD_MAGIC = "WordProcess large clipboard v1\n"
+
+local function encodeLargeClipboard(document, first, last)
+	local rows = {LARGE_CLIPBOARD_MAGIC}
+	local metadata = document:ensureDocumentIndex()
+	for _, span in ipairs(metadata.characterStyles or {}) do
+		local start, finish = math.max(first, span.start), math.min(last, span.finish)
+		if finish > start then
+			rows[#rows+1] = string.format("C %d %d %d\n",
+				start - first, finish - first, span.style)
+		end
+	end
+	for _, span in ipairs(metadata.paragraphStyles or {}) do
+		local start, finish = math.max(first, span.start), math.min(last, span.finish)
+		if finish > start then
+			rows[#rows+1] = string.format("P %d %d %q\n",
+				start - first, finish - first, span.style)
+		end
+	end
+	return table.concat(rows)
+end
+
+local function applyLargeClipboard(document, payload, offset)
+	if not payload or payload:sub(1, #LARGE_CLIPBOARD_MAGIC) ~= LARGE_CLIPBOARD_MAGIC then
+		return
+	end
+	for kind, start, finish, value in payload:gmatch("([CP]) (%d+) (%d+) ([^\n]+)\n") do
+		start, finish = offset + tonumber(start), offset + tonumber(finish)
+		if kind == "C" then
+			document:addLargeCharacterStyle(start, finish, tonumber(value))
+		else
+			local style = value:match('^"(.*)"$')
+			if style then document:addLargeParagraphStyle(start, finish, style) end
+		end
+	end
+end
+
 function Cmd.Copy(keepselection)
 	if currentDocument:usesTextBuffer() then
 		local first, last = currentDocument:textSelection()
@@ -1143,7 +1204,8 @@ function Cmd.Copy(keepselection)
 			NonmodalMessage("Selection exceeds the 16 MiB clipboard safety limit.")
 			return false
 		end
-		wg.clipboard_set(currentDocument._textbuffer:slice(first, length), nil)
+		wg.clipboard_set(currentDocument._textbuffer:slice(first, length),
+			encodeLargeClipboard(currentDocument, first, last))
 		NonmodalMessage(string.format("%d bytes copied to clipboard.", length))
 		if not keepselection then return Cmd.UnsetMark() end
 		return true
@@ -1221,10 +1283,13 @@ end
 
 function Cmd.Paste()
 	if currentDocument:usesTextBuffer() then
-		local text = wg.clipboard_get()
+		local text, payload = wg.clipboard_get()
 		if not text then return false end
 		if currentDocument._textmark ~= nil and not Cmd.Delete() then return false end
-		return Cmd.InsertStringIntoWord(text)
+		local start = currentDocument._textpos
+		if not Cmd.InsertStringIntoWord(text) then return false end
+		applyLargeClipboard(currentDocument, payload, start)
+		return true
 	end
 	local buffer = GetClipboard()
 	if not buffer then

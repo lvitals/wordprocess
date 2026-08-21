@@ -35,6 +35,10 @@ local stylemarkup =
 	["H4"] = BRIGHT + BOLD
 }
 
+function GetParagraphStyleMarkup(style)
+	return stylemarkup[style] or 0
+end
+
 function Paragraph.__iter(self)
 	local function iter(a, i)
       i = i + 1

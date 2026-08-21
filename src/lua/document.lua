@@ -164,8 +164,86 @@ function Document.textSelection(self)
 		math.max(self._textmark, self._textpos)
 end
 
+function Document.ensureDocumentIndex(self)
+	-- Migrate the historical storage-size-specific field in memory. It is
+	-- deliberately removed so subsequent saves contain only the neutral name.
+	self.documentIndex = self.documentIndex or self.largeDocument or {}
+	self.largeDocument = nil
+	self.documentIndex.characterStyles = self.documentIndex.characterStyles or {count=0}
+	self.documentIndex.paragraphStyles = self.documentIndex.paragraphStyles or {count=0}
+	return self.documentIndex
+end
+
+local function adjust_spans(spans, position, removed, added)
+	local removed_end = position + removed
+	local function translate(offset)
+		if offset <= position then return offset end
+		if offset >= removed_end then return offset - removed + added end
+		return position + added
+	end
+	local output = {count=0}
+	for _, span in ipairs(spans) do
+		local start = translate(span.start)
+		local finish = translate(span.finish)
+		if finish > start then
+			span.start, span.finish = start, finish
+			output[#output+1] = span
+		end
+	end
+	output.count = #output
+	return output
+end
+
+function Document.adjustLargeStyleSpans(self, position, removed, added)
+	local metadata = self:ensureDocumentIndex()
+	metadata.wordCount = nil
+	metadata.paragraphCount = nil
+	metadata.paragraphOffsets = {0}
+	metadata.characterStyles = adjust_spans(metadata.characterStyles,
+		position, removed, added)
+	metadata.paragraphStyles = adjust_spans(metadata.paragraphStyles,
+		position, removed, added)
+end
+
+function Document.addLargeCharacterStyle(self, start, finish, style)
+	if finish <= start then return false end
+	local spans = self:ensureDocumentIndex().characterStyles
+	spans[#spans+1] = {start=start, finish=finish, style=style}
+	spans.count = #spans
+	return true
+end
+
+function Document.addLargeParagraphStyle(self, start, finish, style)
+	if finish <= start then return false end
+	local spans = self:ensureDocumentIndex().paragraphStyles
+	spans[#spans+1] = {start=start, finish=finish, style=style}
+	spans.count = #spans
+	return true
+end
+
+function Document.largeCharacterStyleAt(self, position)
+	local mask = 0
+	local metadata = self:ensureDocumentIndex()
+	for _, span in ipairs(metadata and metadata.characterStyles or {}) do
+		if position >= span.start and position < span.finish then
+			if span.style == 0 then mask = 0 else mask = bit32.bor(mask, span.style) end
+		end
+	end
+	return mask
+end
+
+function Document.largeParagraphStyleAt(self, position)
+	local style = "P"
+	local metadata = self:ensureDocumentIndex()
+	for _, span in ipairs(metadata and metadata.paragraphStyles or {}) do
+		if position >= span.start and position < span.finish then style = span.style end
+	end
+	return style
+end
+
 function Document.deleteTextRange(self, start, length)
 	local undoable = self._textbuffer:delete(start, length)
+	self:adjustLargeStyleSpans(start, length, 0)
 	if undoable == false then
 		-- Deliver after the command finishes, so follow-up messages such as
 		-- "Selected text deleted" cannot replace this safety warning.
@@ -179,8 +257,8 @@ AddEventListener("LargeTextUndoHistoryCleared", function()
 	QueueRedraw()
 end)
 
-function CreateTextBufferDocument(filename)
-	local buffer, e = wg.opentextbuffer(filename)
+function CreateTextBufferDocument(filename, content_offset, content_length)
+	local buffer, e = wg.opentextbuffer(filename, content_offset, content_length)
 	if not buffer then return nil, e end
 	local document = CreateDocument()
 	document._textbuffer = buffer

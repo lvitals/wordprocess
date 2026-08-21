@@ -38,11 +38,102 @@ in the destination directory, preserve mode/owner when permitted, fsync the
 file and parent directory, and rename it. Windows uses replace/write-through
 APIs and opens mappings with delete sharing so replacement is possible.
 
-Mapped documents remain plain text. Paragraph/character styles and structured
-exporters are refused with an explanation; they never silently materialise a
-multi-gigabyte document. Clipboard selections are limited to 16 MiB because
-system clipboards require an in-memory payload. Plain-text save/export has no
-such limit.
+Newly imported mapped documents begin as plain text. Saving them as native
+`.wp` enables sparse paragraph/character metadata; structured exporters that
+support mapped documents stream their output rather than silently materialising
+a multi-gigabyte document. Clipboard selections are limited to
+16 MiB because system clipboards require an in-memory payload. Plain-text
+save/export has no such limit.
+
+Saving a scalable document with a `.wp` suffix creates the versioned native
+document container rather than plain text disguised by an extension. Its
+header contains ordinary document-set metadata, content bounds, sparse
+paragraph checkpoints, and reserved paragraph/character-style indexes. The
+UTF-8 body follows the metadata and is mapped directly when the file is opened;
+it is never copied into one Lua string. Subsequent saves stream the logical
+piece-table content into an atomic replacement and remap only the body region.
+
+Character styles (bold, italic, underline and normal) and paragraph styles are
+stored as sparse byte-range spans. They are applied to selected text, rendered
+only across the visible window, adjusted after text edits, and persisted in the
+native metadata. Remaining document-wide tools are tracked in
+[`ROADMAP.md`](../ROADMAP.md).
+
+### Native document format
+
+New ordinary and scalable `.wp` files both begin with
+`WordProcess document v1`. For scalable storage it is followed
+by fixed-width decimal metadata/content lengths and a CRC-32 of the metadata.
+The metadata is the normal headerless WordProcess document-set representation;
+the mapped UTF-8 body begins immediately afterwards. Loading validates all
+ranges and the checksum before constructing indexes or mapping the body region.
+A corrupt header, truncated body, oversized metadata block, or checksum
+mismatch is rejected.
+
+Saving creates an exclusive temporary file beside the destination, streams the
+header and logical piece sequence, flushes the file, atomically renames it, and
+flushes the parent directory on POSIX. The original remains in place when a
+write fails before replacement. After success, the editor reopens the saved
+path and remaps the exact content region, so external-file checks use the new
+file identity rather than the imported source.
+
+The automated suite opens and edits a sparse file larger than 4 GiB. This
+exercises 64-bit offsets without allocating or writing 4 GiB of physical
+storage.
+
+Native saves also scan the piece sequence with constant auxiliary memory to
+refresh exact word and paragraph counts. Those cached values drive the status
+bar and approximate page count. Editing invalidates them immediately, so the
+interface shows an unknown count rather than stale data until the next native
+checkpoint rebuilds the index.
+
+The serialized metadata calls this neutral structure `documentIndex`. The
+historical `largeDocument` field is accepted only while loading old files,
+migrated in memory, and omitted on the next save. An index describes the
+current document layout; it does not classify a document as permanently large
+or small, and remains valid as editing changes its size.
+
+Mapped clipboard operations keep the 16 MiB safety limit, but now attach a
+compact native payload containing character- and paragraph-style spans relative
+to the copied range. Pasting into another mapped document restores those spans;
+applications that understand only the system clipboard continue to receive the
+same plain UTF-8 text.
+
+Smart quotes operate directly on selected mapped ranges up to 16 MiB and
+adjust sparse style offsets for UTF-8 replacements. Offline spellchecking
+walks mapped documents circularly in 1 MiB windows, so its working set is
+independent of document size.
+
+Markdown, HTML, LaTeX, Org and troff exports write through a native streaming
+file writer. ODT streams `content.xml` to temporary storage and then feeds that
+file into the ZIP writer in 64 KiB blocks. None of these exporters builds the
+complete result in a Lua string or table.
+
+The save tests can inject a one-shot I/O error at temporary-file creation,
+content writing, fsync, or rename. They verify that every pre-commit failure
+leaves an existing destination unchanged and that a following save succeeds.
+
+Mapped-document autosave writes a recoverable `WordProcess large journal v1`
+file. The journal contains ordinary structured metadata, references to
+unchanged ranges in the mapped base, and only the inserted byte blocks plus
+piece descriptors. Its size is therefore proportional to edits and sparse
+metadata, not to a multi-gigabyte document. Opening the autosave file remaps
+the recorded base and applies the journal before exposing the recovered,
+unsaved document.
+
+The loader continues to accept the historical `WordProcess dumpfile` and
+`WordProcess large document v1` signatures. Saving migrates either form to the
+unified name. Older applications fail closed on the new versioned signature;
+an unsupported future version reports that a newer application is required.
+
+`Ctrl+G` immediately opens the same structural table of contents for every
+WordProcess document. It lists non-empty paragraphs styled as H1 through H4,
+with hierarchical numbering, and intentionally omits body text and blank
+paragraphs. There is no intermediate prompt or special syntax. Scalable
+storage reads only sparse paragraph-style spans and bounded title previews,
+without scanning or materialising the complete body. Clipboard-backed
+scrapbook actions and the character-style status indicator also work with
+scalable storage.
 
 Undo payload is bounded independently of the 500-revision count. Deletions up
 to 64 MiB retain undo data with a single copy. Larger deletions remain allowed
@@ -87,3 +178,9 @@ wp --lua scripts/benchmark-large-text.lua FILE '' 100000
 reading the complete file. RSS measures resident process pages; it does not
 include every filesystem page that the operating-system page cache may retain
 while navigating through the mapping.
+
+On 2026-08-21 the benchmark processed a 4,294,971,392-byte sparse file, made
+1,000 deterministic random edits, and performed a complete streaming Save As.
+Initialization took 16 µs, median edit latency was 56 µs (P99 133 µs), the
+4 GiB save took 3.041 s, and reported RSS was 7,480 KiB. Results vary with the
+storage device and operating-system cache.

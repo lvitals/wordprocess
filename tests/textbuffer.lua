@@ -240,3 +240,216 @@ for i = 1, 100 do
 	model = model:sub(1, position)..model:sub(position + deletion + 1)
 	AssertEquals(model, buffer:slice(0, buffer:size()))
 end
+
+-- Native large .wp files keep metadata separate from a mapped content region.
+-- Saving and loading must not turn the file into disguised plain text.
+local nativeSource = dir.."/native-source.txt"
+local nativePath = dir.."/large-native.wp"
+local nativeText = "first line\nsecond line\n"
+AssertEquals(nil, select(2, wg.writefile(nativeSource, nativeText)))
+local nativeDocument = assert(CreateTextBufferDocument(nativeSource))
+documentSet = CreateDocumentSet()
+documentSet.menu = CreateMenuTree()
+documentSet:addDocument(nativeDocument, "Large document")
+documentSet:setCurrent("Large document")
+currentDocument = nativeDocument
+currentDocument._textmark = 0
+currentDocument._textpos = 5
+currentDocument.mp = 1
+AssertEquals(true, Cmd.SetStyle("b"))
+currentDocument._textpos = 0
+AssertEquals(true, Cmd.ChangeParagraphStyle("H1"))
+AssertEquals(true, Cmd.SaveCurrentDocumentAs(nativePath))
+local nativeBytes = assert(wg.readfile(nativePath))
+AssertEquals("WordProcess document v1", nativeBytes:match("^[^\n]+"))
+AssertEquals(true, #nativeBytes > #nativeText)
+AssertEquals(nil, nativeBytes:find(".largeDocument", 1, true))
+AssertEquals(true, nativeBytes:find(".documentIndex", 1, true) ~= nil)
+
+local futurePath = dir.."/future-native.wp"
+AssertEquals(nil, select(2, wg.writefile(futurePath,
+	nativeBytes:gsub("^WordProcess document v1", "WordProcess document v2"))))
+local futureDocument, futureError = LoadFromFile(futurePath)
+AssertEquals(nil, futureDocument)
+AssertEquals(true, futureError:find("requires a newer application", 1, true) ~= nil)
+
+local loadedNative, nativeLoadError = LoadFromFile(nativePath)
+AssertEquals(nil, nativeLoadError)
+AssertNotNull(loadedNative)
+AssertEquals(true, loadedNative.current:usesTextBuffer())
+AssertEquals(true, loadedNative.current._nativeLarge)
+AssertEquals(nil, loadedNative.current.largeDocument)
+AssertEquals(3, loadedNative.current.documentIndex.paragraphCount)
+AssertEquals(4096, loadedNative.current.documentIndex.paragraphIndexStride)
+AssertEquals(0, loadedNative.current.documentIndex.paragraphOffsets[1])
+AssertEquals(4, loadedNative.current.documentIndex.wordCount)
+AssertNotNull(loadedNative.current.documentIndex.paragraphStyles)
+AssertNotNull(loadedNative.current.documentIndex.characterStyles)
+AssertEquals(true, bit32.btest(loadedNative.current:largeCharacterStyleAt(0), wg.BOLD))
+AssertEquals("H1", loadedNative.current:largeParagraphStyleAt(0))
+loadedNative.current:addLargeCharacterStyle(0, 5, wg.ITALIC)
+AssertEquals(true, bit32.btest(
+	loadedNative.current:largeCharacterStyleAt(2), wg.BOLD))
+AssertEquals(true, bit32.btest(
+	loadedNative.current:largeCharacterStyleAt(2), wg.ITALIC))
+loadedNative.current:addLargeCharacterStyle(0, 5, 0)
+AssertEquals(0, loadedNative.current:largeCharacterStyleAt(2))
+loadedNative.current:addLargeCharacterStyle(0, 5, wg.BOLD)
+AssertEquals(nativeText, loadedNative.current._textbuffer:slice(0,
+	loadedNative.current._textbuffer:size()))
+
+documentSet = loadedNative
+currentDocument = loadedNative.current
+currentDocument._textbuffer:insert(0, "edited ")
+currentDocument:adjustLargeStyleSpans(0, 0, #"edited ")
+currentDocument._textchanged = true
+AssertEquals(true, bit32.btest(currentDocument:largeCharacterStyleAt(0), wg.BOLD))
+AssertEquals("H1", currentDocument:largeParagraphStyleAt(0))
+AssertEquals(true, Cmd.SaveCurrentDocument())
+local reloadedNative = assert(LoadFromFile(nativePath))
+AssertEquals("edited "..nativeText, reloadedNative.current._textbuffer:slice(0,
+	reloadedNative.current._textbuffer:size()))
+
+-- Ctrl-G has the same table-of-contents meaning for mapped and ordinary
+-- documents. It reads only sparse heading spans and bounded title slices.
+documentSet = reloadedNative
+currentDocument = reloadedNative.current
+currentDocument._textpos = currentDocument._textbuffer:size()
+local oldFormRun = Form.Run
+Form.Run = function(dialogue)
+	AssertEquals("Table of Contents", dialogue.title)
+	AssertEquals(1, #dialogue.widgets[2].data)
+	AssertEquals("1. edited first line", dialogue.widgets[2].data[1].label)
+	dialogue.widgets[2].cursor = 1
+	return true
+end
+AssertEquals(true, Cmd.Goto())
+AssertEquals(0, currentDocument._textpos)
+Form.Run = oldFormRun
+
+-- Corrupt metadata is rejected before it can construct indexed objects.
+local corruptPath = dir.."/corrupt-native.wp"
+local savedNative = assert(wg.readfile(nativePath))
+local _, metadataStart = assert(savedNative:find("\n\n", 1, true))
+metadataStart = metadataStart + 1
+local damaged = savedNative:sub(1, metadataStart - 1)..
+	string.char(bit32.bxor(savedNative:byte(metadataStart), 1))..
+	savedNative:sub(metadataStart + 1)
+AssertEquals(nil, select(2, wg.writefile(corruptPath, damaged)))
+local corruptDocument, corruptError = LoadFromFile(corruptPath)
+AssertEquals(nil, corruptDocument)
+AssertEquals(true, corruptError:find("metadata checksum failed", 1, true) ~= nil)
+
+-- A sparse file above 4 GiB validates 64-bit offsets without allocating or
+-- writing four physical GiB. Opening and editing remain bounded.
+local sparsePath = dir.."/sparse-4g.txt"
+AssertEquals(nil, select(2, wg.writefile(sparsePath, "")))
+local sparseSize = 4 * 1024 * 1024 * 1024 + 4096
+AssertEquals(true, wg.truncatefile(sparsePath, sparseSize))
+local sparseDocument = assert(CreateTextBufferDocument(sparsePath))
+AssertEquals(sparseSize, sparseDocument._textbuffer:size())
+AssertEquals("\0", sparseDocument._textbuffer:slice(sparseSize - 1, 1))
+sparseDocument._textbuffer:insert(sparseSize - 1, "x")
+AssertEquals("x\0", sparseDocument._textbuffer:slice(sparseSize - 1, 2))
+sparseDocument:adjustLargeStyleSpans(sparseSize - 1, 0, 1)
+sparseDocument:addLargeCharacterStyle(sparseSize - 1, sparseSize, wg.BOLD)
+documentSet = CreateDocumentSet()
+documentSet.menu = CreateMenuTree()
+documentSet:addDocument(sparseDocument, "Sparse journal")
+currentDocument = sparseDocument
+local sparseJournal = dir.."/sparse-4g.autosave.wp"
+AssertEquals(true, sparseDocument._textbuffer:journal(sparseJournal,
+	SaveToHeaderlessString(documentSet)))
+AssertEquals(true, assert(wg.stat(sparseJournal)).size < 1024*1024)
+local recoveredSparse, recoveredError = LoadFromFile(sparseJournal)
+AssertEquals(nil, recoveredError)
+AssertNotNull(recoveredSparse)
+AssertEquals(sparseSize + 1, recoveredSparse.current._textbuffer:size())
+AssertEquals("x\0", recoveredSparse.current._textbuffer:slice(sparseSize - 1, 2))
+AssertEquals(true, bit32.btest(recoveredSparse.current:
+	largeCharacterStyleAt(sparseSize - 1), wg.BOLD))
+recoveredSparse.current._textbuffer:close()
+sparseDocument._textbuffer:close()
+
+-- Structured mapped clipboard payloads restore character and paragraph spans.
+local clipPath = dir.."/mapped-clipboard.txt"
+AssertEquals(nil, select(2, wg.writefile(clipPath, "hello world")))
+local clipDocument = assert(CreateTextBufferDocument(clipPath))
+documentSet = CreateDocumentSet()
+documentSet.menu = CreateMenuTree()
+documentSet:addDocument(clipDocument, "clipboard source")
+currentDocument = clipDocument
+clipDocument:addLargeCharacterStyle(0, 5, wg.BOLD)
+clipDocument:addLargeParagraphStyle(0, 5, "H1")
+clipDocument._textmark, clipDocument._textpos, clipDocument.mp = 0, 5, 1
+AssertEquals(true, Cmd.Copy())
+clipDocument._textpos = clipDocument._textbuffer:size()
+AssertEquals(true, Cmd.Paste())
+AssertEquals("hello worldhello", clipDocument._textbuffer:slice(0,
+	clipDocument._textbuffer:size()))
+AssertEquals(true, bit32.btest(clipDocument:largeCharacterStyleAt(12), wg.BOLD))
+AssertEquals("H1", clipDocument:largeParagraphStyleAt(12))
+
+-- Smart quotes edit bounded mapped selections and preserve adjacent styles.
+documentSet.addons.smartquotes = {
+	doublequotes=true, singlequotes=true, notinraw=true,
+	leftdouble="“", rightdouble="”", leftsingle="‘", rightsingle="’"
+}
+clipDocument._textbuffer:insert(0, '"quoted" ')
+clipDocument:adjustLargeStyleSpans(0, 0, 9)
+clipDocument._textmark, clipDocument._textpos = 0, 8
+AssertEquals(true, Cmd.Smartquotify())
+AssertEquals("“quoted”", clipDocument._textbuffer:slice(0, 12))
+AssertEquals(true, Cmd.Unsmartquotify())
+AssertEquals('"quoted"', clipDocument._textbuffer:slice(0, 8))
+
+-- Offline spellchecking scans mapped content in bounded windows and wraps.
+documentSet.addons.spellchecker = {
+	enabled=true, usesystemdictionary=true, useuserdictionary=false
+}
+SetSystemDictionaryForTesting({"quoted", "hello", "world"})
+clipDocument._textmark = nil
+clipDocument._textpos = 0
+AssertEquals(true, Cmd.FindNextMisspeltWord())
+AssertEquals("worldhello", GetWordSimpleText(clipDocument._textbuffer:slice(
+	clipDocument._textmark, clipDocument._textpos-clipDocument._textmark)))
+
+-- Every structured exporter consumes mapped paragraphs without assembling the
+-- complete output in a Lua table. ODT streams content.xml from a temporary file.
+clipDocument._textmark = nil
+documentSet.addons.htmlexport = {
+	italic_on="<i>", italic_off="</i>", underline_on="<u>",
+	underline_off="</u>", bold_on="<b>", bold_off="</b>"
+}
+local exports = {
+	{Cmd.ExportMarkdownFile, "/mapped.md"},
+	{Cmd.ExportHTMLFile, "/mapped.html"},
+	{Cmd.ExportLatexFile, "/mapped.tex"},
+	{Cmd.ExportOrgFile, "/mapped.org"},
+	{Cmd.ExportTroffFile, "/mapped.tr"},
+}
+for _, export in ipairs(exports) do
+	local path = dir..export[2]
+	AssertEquals(true, export[1](path))
+	AssertEquals(true, #assert(wg.readfile(path)) > 0)
+end
+local odtPath = dir.."/mapped.odt"
+AssertEquals(true, Cmd.ExportODTFile(odtPath))
+AssertEquals(true, assert(wg.readfromzip(odtPath, "content.xml")):
+	find("quoted", 1, true) ~= nil)
+
+-- Fault injection is one-shot and leaves an existing destination untouched at
+-- each pre-commit save phase.
+local faultSource = dir.."/fault-source.txt"
+local faultTarget = dir.."/fault-target.txt"
+AssertEquals(nil, select(2, wg.writefile(faultSource, "source")))
+AssertEquals(nil, select(2, wg.writefile(faultTarget, "original")))
+local faultBuffer = assert(wg.opentextbuffer(faultSource))
+faultBuffer:insert(faultBuffer:size(), " changed")
+for _, phase in ipairs({"temporary", "write", "sync", "rename"}) do
+	wg.setsavefault(phase)
+	AssertEquals(nil, faultBuffer:save(faultTarget))
+	AssertEquals("original", wg.readfile(faultTarget))
+end
+AssertEquals(true, faultBuffer:save(faultTarget))
+AssertEquals("source changed", wg.readfile(faultTarget))

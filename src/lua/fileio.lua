@@ -22,6 +22,7 @@ local unpack = rawget(_G, "unpack") or table.unpack
 local MAGIC = "WordProcess dumpfile v1: this is not a text file!"
 local ZMAGIC = "WordProcess dumpfile v2: this is not a text file!"
 local TMAGIC = "WordProcess dumpfile v3: this is a text file; diff me!"
+local DOCUMENT_MAGIC = "WordProcess document v1"
 
 local STOP = 0
 local TABLE = 1
@@ -132,7 +133,7 @@ function SaveToFile(filename, object)
 	-- Write the file to a *different* filename (so that crashes during
 	-- writing doesn't corrupt the file).
 
-	local s = TMAGIC .. "\n" .. SaveToHeaderlessString(object)
+	local s = DOCUMENT_MAGIC .. "\n" .. SaveToHeaderlessString(object)
 
 	local new_filename = filename..".new"
 	local _, e = WriteFile(new_filename, s)
@@ -172,6 +173,85 @@ function ShowLargeTextSaveMessage(filename)
 	return true
 end
 
+local LEGACY_LARGE_WP_MAGIC = "WordProcess large document v1"
+local LARGE_JOURNAL_MAGIC = "WordProcess large journal v1"
+
+local function MetadataChecksum(data)
+	local crc = 0xffffffff
+	for i = 1, #data do
+		crc = bit32.bxor(crc, data:byte(i))
+		for _ = 1, 8 do
+			if bit32.band(crc, 1) ~= 0 then
+				crc = bit32.bxor(bit32.rshift(crc, 1), 0xedb88320)
+			else
+				crc = bit32.rshift(crc, 1)
+			end
+		end
+	end
+	return bit32.bnot(crc)
+end
+
+local function UpdateDocumentIndexes(document)
+	local buffer = document._textbuffer
+	local word_count, paragraph_count = buffer:stats()
+	local stride = 4096
+	local offsets = {0}
+	local position = 0
+	local paragraph = 1
+	while position < buffer:size() do
+		local newline = buffer:find(position, 10)
+		if not newline then break end
+		position = newline + 1
+		paragraph = paragraph + 1
+		if ((paragraph - 1) % stride) == 0 then
+			offsets[#offsets+1] = position
+		end
+	end
+	local previous = document:ensureDocumentIndex()
+	document.documentIndex = {
+		version = 1,
+		contentLength = buffer:size(),
+		paragraphCount = paragraph_count,
+		wordCount = word_count,
+		paragraphIndexStride = stride,
+		paragraphOffsets = offsets,
+		paragraphStyles = previous.paragraphStyles or {count=0},
+		characterStyles = previous.characterStyles or {count=0},
+	}
+end
+
+local function BuildLargeWPPrefix()
+	UpdateDocumentIndexes(currentDocument)
+	local metadata = SaveToHeaderlessString(documentSet)
+	local header = DOCUMENT_MAGIC.."\n"..
+		string.format("metadata-length: %020d\n", #metadata)..
+		string.format("metadata-crc32: %08x\n", MetadataChecksum(metadata))..
+		string.format("content-length: %020d\n", currentDocument._textbuffer:size())..
+		"\n"
+	return header..metadata
+end
+
+local function SaveLargeWP(filename)
+	local oldname = documentSet.name
+	documentSet.name = filename
+	-- Index rebuilding can scan billions of bytes. Display progress before that
+	-- work starts, not only immediately before the final streaming write.
+	ShowLargeTextSaveMessage(filename)
+	local prefix = BuildLargeWPPrefix()
+	local ok, e = currentDocument._textbuffer:save(filename, prefix)
+	if not ok then
+		documentSet.name = oldname
+		ModalMessage("Cannot save WordProcess document", e or "Unknown error")
+		return false
+	end
+	currentDocument._textsource = filename
+	currentDocument._nativeLarge = true
+	currentDocument._textchanged = false
+	documentSet:clean()
+	NonmodalMessage("WordProcess document saved.")
+	return true
+end
+
 function Cmd.SaveCurrentDocumentAs(filename)
 	if currentDocument:usesTextBuffer() then
 		if not filename then
@@ -195,6 +275,9 @@ function Cmd.SaveCurrentDocumentAs(filename)
 			ModalMessage("Source file changed",
 				"The original path changed on disk. Save As will preserve the "..
 				"version currently open in the editor without overwriting it.")
+		end
+		if filename:lower():match("%.wp$") then
+			return SaveLargeWP(filename)
 		end
 		ShowLargeTextSaveMessage(filename)
 		local ok, e = currentDocument._textbuffer:save(filename)
@@ -659,7 +742,7 @@ function LoadFromString(filename, data)
 		loader = loadfromstream
 	elseif (magic == ZMAGIC) then
 		loader = loadfromstreamz
-	elseif (magic == TMAGIC) then
+	elseif (magic == TMAGIC) or (magic == DOCUMENT_MAGIC) then
 		loader = loadfromstreamt
 	else
 		fp:close()
@@ -669,7 +752,116 @@ function LoadFromString(filename, data)
 	return loader(fp)
 end
 
+local function LoadLargeWPFromFile(filename)
+	local probe = wg.opentextbuffer(filename)
+	if not probe then return nil, nil, false end
+	local probe_length = math.min(probe:size(), 4096)
+	local header = probe:slice(0, probe_length)
+	local scalable_magic
+	if header:sub(1, #DOCUMENT_MAGIC + 1) == DOCUMENT_MAGIC.."\n" and
+			header:sub(#DOCUMENT_MAGIC + 2):match("^metadata%-length:") then
+		scalable_magic = DOCUMENT_MAGIC
+	elseif header:sub(1, #LEGACY_LARGE_WP_MAGIC + 1) ==
+			LEGACY_LARGE_WP_MAGIC.."\n" then
+		scalable_magic = LEGACY_LARGE_WP_MAGIC
+	end
+	if header:match("^WordProcess document v%d+\nmetadata%-length:") and
+			not scalable_magic then
+		probe:close()
+		return nil, "This WordProcess document requires a newer application version", true
+	end
+	if not scalable_magic then
+		probe:close()
+		return nil, nil, false
+	end
+
+	local metadata_length, metadata_checksum, content_length, content_offset = header:match(
+		"^"..scalable_magic:gsub("([^%w])", "%%%1")..
+		"\nmetadata%-length: (%d+)\n"..
+		"metadata%-crc32: (%x+)\n"..
+		"content%-length: (%d+)\n\n()")
+	metadata_length = tonumber(metadata_length)
+	metadata_checksum = tonumber(metadata_checksum, 16)
+	content_length = tonumber(content_length)
+	if not metadata_length or not metadata_checksum or not content_length or not content_offset then
+		probe:close()
+		return nil, "Invalid WordProcess document header", true
+	end
+	content_offset = content_offset - 1 + metadata_length
+	if metadata_length > (16 * 1024 * 1024) or
+		content_offset > probe:size() or
+		content_length > (probe:size() - content_offset) then
+		probe:close()
+		return nil, "WordProcess document ranges are invalid", true
+	end
+
+	local metadata_start = content_offset - metadata_length
+	local metadata = probe:slice(metadata_start, metadata_length)
+	probe:close()
+	if MetadataChecksum(metadata) ~= metadata_checksum then
+		return nil, "WordProcess document metadata checksum failed", true
+	end
+	local loaded = LoadFromHeaderlessString(metadata)
+	if not loaded or not loaded.current then
+		return nil, "WordProcess document metadata is invalid", true
+	end
+
+	local placeholder = loaded.current
+	local mapped, e = CreateTextBufferDocument(filename, content_offset, content_length)
+	if not mapped then return nil, e, true end
+	for key, value in pairs(placeholder) do
+		if type(key) ~= "number" and key:sub(1, 1) ~= "_" then
+			mapped[key] = value
+		end
+	end
+	mapped:ensureDocumentIndex()
+	mapped._nativeLarge = true
+	local index = loaded:_findDocument(placeholder.name)
+	loaded.documents[index] = mapped
+	loaded._documentIndex[placeholder.name] = mapped
+	loaded.current = mapped
+	return loaded, nil, true
+end
+
+local function LoadLargeJournalFromFile(filename)
+	local probe = wg.opentextbuffer(filename)
+	if not probe then return nil, nil, false end
+	local prefix = probe:slice(0, math.min(probe:size(), #LARGE_JOURNAL_MAGIC + 1))
+	probe:close()
+	if prefix ~= LARGE_JOURNAL_MAGIC.."\n" then return nil, nil, false end
+	local source, content_offset, base_length, metadata = wg.journalinfo(filename)
+	if not source then return nil, content_offset, true end
+	local loaded = LoadFromHeaderlessString(metadata)
+	if not loaded or not loaded.current then
+		return nil, "Large-document journal metadata is invalid", true
+	end
+	local placeholder = loaded.current
+	local mapped, e = CreateTextBufferDocument(source, content_offset, base_length)
+	if not mapped then
+		return nil, "Cannot open journal base file: "..tostring(e), true
+	end
+	local applied, applyerror = mapped._textbuffer:applyjournal(filename)
+	if not applied then mapped._textbuffer:close(); return nil, applyerror, true end
+	for key, value in pairs(placeholder) do
+		if type(key) ~= "number" and key:sub(1, 1) ~= "_" then mapped[key] = value end
+	end
+	mapped:ensureDocumentIndex()
+	mapped._textsource = source
+	mapped._textchanged = true
+	mapped._recoveredJournal = filename
+	local index = loaded:_findDocument(placeholder.name)
+	loaded.documents[index] = mapped
+	loaded._documentIndex[placeholder.name] = mapped
+	loaded.current = mapped
+	loaded:touch()
+	return loaded, nil, true
+end
+
 function LoadFromFile(filename)
+	local recovered, journal_error, is_journal = LoadLargeJournalFromFile(filename)
+	if is_journal then return recovered, journal_error end
+	local large, large_error, recognized = LoadLargeWPFromFile(filename)
+	if recognized then return large, large_error end
 	local data, _, e = wg.readfile(filename);
 	if not data then
 		assert(e)
@@ -842,6 +1034,9 @@ end
 function GetClipboard()
 	local text, wgdata = wg.clipboard_get()
 	if wgdata then
+		if wgdata:sub(1, 31) == "WordProcess large clipboard v1\n" then
+			return text and Cmd.ImportTextString(text) or CreateDocument()
+		end
 		return LoadFromHeaderlessString(wgdata).documents[1]
 	end
 	if text then

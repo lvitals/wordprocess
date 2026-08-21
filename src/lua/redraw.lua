@@ -11,6 +11,7 @@ local SetNormal = wg.setnormal
 local SetBold = wg.setbold
 local SetBright = wg.setbright
 local SetUnderline = wg.setunderline
+local SetItalic = wg.setitalic
 local SetReverse = wg.setreverse
 local SetDim = wg.setdim
 local GetStringWidth = wg.getstringwidth
@@ -20,6 +21,50 @@ local Sync = wg.sync
 
 local UseUnicode = wg.useunicode
 local BLINK_TIME = 0.8
+
+local function setLargeTextStyle(mask, selected)
+	SetNormal()
+	if bit32.btest(mask, wg.BOLD) then SetBold() end
+	if bit32.btest(mask, wg.ITALIC) then SetItalic() end
+	if bit32.btest(mask, wg.UNDERLINE) then SetUnderline() end
+	if bit32.btest(mask, wg.BRIGHT) then SetBright() end
+	if selected then SetReverse() end
+end
+
+local function drawLargeTextRange(document, x, y, first, finish,
+		selection_start, selection_end, paragraph_style)
+	local boundaries = {first, finish}
+	local metadata = document:ensureDocumentIndex()
+	for _, span in ipairs(metadata and metadata.characterStyles or {}) do
+		if span.start < finish and span.finish > first then
+			boundaries[#boundaries+1] = math.max(first, span.start)
+			boundaries[#boundaries+1] = math.min(finish, span.finish)
+		end
+	end
+	if selection_start and selection_end then
+		if selection_start > first and selection_start < finish then
+			boundaries[#boundaries+1] = selection_start
+		end
+		if selection_end > first and selection_end < finish then
+			boundaries[#boundaries+1] = selection_end
+		end
+	end
+	table.sort(boundaries)
+	local previous
+	for _, start in ipairs(boundaries) do
+		if previous and start > previous then
+			local mask = bit32.bor(GetParagraphStyleMarkup(paragraph_style),
+				document:largeCharacterStyleAt(previous))
+			local selected = selection_start and selection_end and
+				previous >= selection_start and previous < selection_end
+			setLargeTextStyle(mask, selected)
+			Write(x + document:textCellOffset(first, previous), y,
+				document._textbuffer:slice(previous, start - previous))
+		end
+		previous = start
+	end
+	SetNormal()
+end
 
 local messages = {}
 local lineindex = {}
@@ -519,33 +564,17 @@ local function redrawtextbuffer()
 			horizontal, paperwidth)
 		if offset == line_start then cursor_display_start = display_start end
 		local length = visible_end - display_start
+		local paragraph_style = document:largeParagraphStyleAt(offset)
 		SetColour(Palette.P_FG, Palette.P_BG)
 		SetNormal()
 		if length > 0 then
-			local marked_start = selection_start and math.max(display_start, selection_start)
-			local marked_end = selection_end and math.min(visible_end, selection_end)
-			if marked_start and marked_end and marked_start < marked_end then
-				local before = marked_start - display_start
-				if before > 0 then
-					Write(lm, y, document._textbuffer:slice(display_start, before))
-				end
-				SetReverse()
-				local beforecells = document:textCellOffset(display_start, marked_start)
-				Write(lm + beforecells, y, document._textbuffer:slice(marked_start,
-					marked_end - marked_start))
-				SetNormal()
-				if marked_end < visible_end then
-					Write(lm + document:textCellOffset(display_start, marked_end), y,
-						document._textbuffer:slice(marked_end, visible_end - marked_end))
-				end
-			else
-				Write(lm, y, document._textbuffer:slice(display_start, length))
-			end
+			drawLargeTextRange(document, lm, y, display_start, visible_end,
+				selection_start, selection_end, paragraph_style)
 		end
 
 		if currentDocument.viewmode > 1 and papermargin > 1 then
 			local label
-			if currentDocument.viewmode == 2 then label = "P"
+			if currentDocument.viewmode == 2 then label = paragraph_style
 			elseif currentDocument.viewmode == 3 then
 				label = visible_line and tostring(visible_line) or "~"
 			elseif currentDocument.viewmode == 4 then

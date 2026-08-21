@@ -106,6 +106,20 @@ static int bit32_btest_cb(lua_State* L)
     return 1;
 }
 
+static int bit32_bnot_cb(lua_State* L)
+{
+    lua_pushnumber(L, (lua_Number)(~bit32_getarg(L, 1)));
+    return 1;
+}
+
+static int bit32_rshift_cb(lua_State* L)
+{
+    unsigned shift = bit32_getarg(L, 2);
+    unsigned result = shift >= 32 ? 0 : bit32_getarg(L, 1) >> shift;
+    lua_pushnumber(L, (lua_Number)result);
+    return 1;
+}
+
 /* Lua 5.1 (and Luau) only have a global `unpack`; 5.2+ moved it to
  * `table.unpack` and dropped the global. This codebase uses both
  * spellings interchangeably, so make sure both exist regardless of
@@ -138,6 +152,8 @@ void bit32_init(lua_State* L)
         {"bor",   bit32_bor_cb  },
         {"bxor",  bit32_bxor_cb },
         {"btest", bit32_btest_cb},
+        {"bnot",  bit32_bnot_cb },
+        {"rshift", bit32_rshift_cb},
         {NULL,    NULL          }
     };
 

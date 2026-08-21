@@ -151,8 +151,19 @@ static int writezip_cb(lua_State* L)
         while (lua_next(L, 2) != 0)
         {
             const char* key = lua_tostring(L, -2);
-            size_t valuelen;
-            const char* value = lua_tolstring(L, -1, &valuelen);
+            size_t valuelen = 0;
+            const char* value = NULL;
+            FILE* source = NULL;
+            if (lua_istable(L, -1))
+            {
+                lua_getfield(L, -1, "filename");
+                const char* filename = lua_tostring(L, -1);
+                if (filename) source = fopen(filename, "rb");
+                lua_pop(L, 1);
+                if (!source) { result = 0; break; }
+            }
+            else
+                value = lua_tolstring(L, -1, &valuelen);
 
             int i = zipOpenNewFileInZip(zf,
                 key,
@@ -166,11 +177,24 @@ static int writezip_cb(lua_State* L)
                 Z_DEFAULT_COMPRESSION);
             if (i != ZIP_OK)
             {
+                if (source) fclose(source);
                 result = 0;
                 break;
             }
 
-            i = zipWriteInFileInZip(zf, value, valuelen);
+            if (source)
+            {
+                char buffer[64 * 1024];
+                while ((valuelen = fread(buffer, 1, sizeof(buffer), source)) != 0)
+                {
+                    i = zipWriteInFileInZip(zf, buffer, valuelen);
+                    if (i != ZIP_OK) break;
+                }
+                if (ferror(source)) i = ZIP_ERRNO;
+                fclose(source);
+            }
+            else
+                i = zipWriteInFileInZip(zf, value, valuelen);
             if (i != ZIP_OK)
             {
                 result = 0;

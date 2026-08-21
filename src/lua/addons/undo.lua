@@ -89,11 +89,12 @@ end
 
 function Cmd.Undo()
 	if currentDocument:usesTextBuffer() then
-		local changed, position = currentDocument._textbuffer:undo()
+		local changed, position, removed, added = currentDocument._textbuffer:undo()
 		if not changed then
 			NonmodalMessage("Nothing left to undo")
 			return false
 		end
+		currentDocument:adjustLargeStyleSpans(position - added, removed, added)
 		currentDocument._textpos = position
 		currentDocument._textchanged = true
 		documentSet:touch()
@@ -115,11 +116,12 @@ end
 
 function Cmd.Redo()
 	if currentDocument:usesTextBuffer() then
-		local changed, position = currentDocument._textbuffer:redo()
+		local changed, position, removed, added = currentDocument._textbuffer:redo()
 		if not changed then
 			NonmodalMessage("Nothing left to redo")
 			return false
 		end
+		currentDocument:adjustLargeStyleSpans(position - added, removed, added)
 		currentDocument._textpos = position
 		currentDocument._textchanged = true
 		documentSet:touch()

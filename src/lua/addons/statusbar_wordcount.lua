@@ -11,6 +11,12 @@ local string_format = string.format
 do
 	local function cb(event, token, terms)
 		if currentDocument:usesTextBuffer() then
+			local count = currentDocument:ensureDocumentIndex().wordCount
+			terms[#terms+1] = {
+				priority=90,
+				value=count and string_format("%d %s", count,
+					Pluralise(count, "word", "words")) or "~ words",
+			}
 			return
 		end
 		terms[#terms+1] =

@@ -174,31 +174,47 @@ end
 -----------------------------------------------------------------------------
 -- Add the current word to the user dictionary.
 
+local MAPPED_SPELL_WINDOW = 1024*1024
+
+local function mapped_word_at_cursor()
+	local buffer = currentDocument._textbuffer
+	local size = buffer:size()
+	local centre = math.min(currentDocument._textpos, size)
+	local start = math.max(0, centre - MAPPED_SPELL_WINDOW)
+	local finish = math.min(size, centre + MAPPED_SPELL_WINDOW)
+	local text = buffer:slice(start, finish-start)
+	local relative = centre - start + 1
+	for first, word, after in text:gmatch("()(%S+)()") do
+		if relative >= first and relative <= after then
+			return word, start + first - 1, start + after - 1
+		end
+	end
+	return ""
+end
+
+local function add_word_to_user_dictionary(word)
+	word = GetWordSimpleText(word)
+	if word == "" then return true end
+	if (not GetUserDictionary()[word]) and (not GetSystemDictionary()[word]) then
+		local d = get_user_dictionary_document()
+		d:appendParagraph(CreateParagraph("V", word))
+		documentSet:touch()
+		user_dictionary_cache = nil
+		NonmodalMessage("Word '"..word.."' added to user dictionary")
+	else
+		NonmodalMessage("Word '"..word.."' already in user dictionary")
+	end
+	documentSet:touch()
+	QueueRedraw()
+	return true
+end
+
 function Cmd.AddToUserDictionary()
 	if currentDocument:usesTextBuffer() then
-		NonmodalMessage("Spellchecking mapped text is not available yet.")
-		return false
+		return add_word_to_user_dictionary(mapped_word_at_cursor())
 	end
 	local word = GetWordSimpleText(currentDocument[currentDocument.cp][currentDocument.cw])
-
-	if (word ~= "") then
-		if (not GetUserDictionary()[word]) and
-			(not GetSystemDictionary()[word])
-		then
-			local d = get_user_dictionary_document()
-			d:appendParagraph(CreateParagraph("V", word))
-			documentSet:touch()
-			user_dictionary_cache = nil
-			NonmodalMessage("Word '"..word.."' added to user dictionary")
-		else
-			NonmodalMessage("Word '"..word.."' already in user dictionary")
-		end
-
-		documentSet:touch()
-		QueueRedraw()
-	end
-
-	return true
+	return add_word_to_user_dictionary(word)
 end
 
 -----------------------------------------------------------------------------
@@ -220,7 +236,44 @@ end
 
 function Cmd.FindNextMisspeltWord()
 	if currentDocument:usesTextBuffer() then
-		NonmodalMessage("Spellchecking mapped text is not available yet.")
+		ImmediateMessage("Searching...")
+		local buffer = currentDocument._textbuffer
+		local size = buffer:size()
+		local start = currentDocument._textmark and
+			math.max(currentDocument._textmark, currentDocument._textpos) or
+			currentDocument._textpos
+		local ranges = {{start, size}, {0, start}}
+		for _, range in ipairs(ranges) do
+			local position = range[1]
+			while position < range[2] do
+				local length = math.min(MAPPED_SPELL_WINDOW, range[2]-position)
+				local text = buffer:slice(position, length)
+				local consumed = #text
+				if position + length < range[2] and not text:sub(-1):match("%s") then
+					local boundary = text:match("^.*()%s")
+					if boundary then consumed = boundary end
+				end
+				if consumed == 0 then consumed = #text end
+				local window = text:sub(1, consumed)
+				for first, word, after in window:gmatch("()(%S+)()") do
+					local absolute = position + first - 1
+					local previous = absolute == 0 and "" or buffer:slice(absolute-1, 1)
+					local firstword = absolute == 0 or previous == "\n" or previous == "\r"
+					if IsWordMisspelt(word, firstword) then
+						currentDocument._textmark = absolute
+						currentDocument._textpos = position + after - 1
+						currentDocument.mp = 1
+						NonmodalMessage("Misspelt word found.")
+						QueueRedraw()
+						return true
+					end
+				end
+				position = position + math.max(consumed, 1)
+			end
+		end
+		currentDocument._textmark = nil
+		QueueRedraw()
+		NonmodalMessage("No misspelt words found.")
 		return false
 	end
 	ImmediateMessage("Searching...")

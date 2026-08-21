@@ -10,7 +10,10 @@ local style = 0
 
 do
 	local function cb(event, token, terms)
-		if currentDocument:usesTextBuffer() then return end
+		if currentDocument:usesTextBuffer() then
+			style = currentDocument:largeCharacterStyleAt(
+				math.max(0, currentDocument._textpos - 1))
+		end
 		local s =
 		{
 			bit32.btest(style, wg.ITALIC) and "I" or ".",
@@ -33,7 +36,10 @@ end
 
 do
 	local function cb(event, token)
-		if not currentDocument:usesTextBuffer() then
+		if currentDocument:usesTextBuffer() then
+			style = currentDocument:largeCharacterStyleAt(
+				math.max(0, currentDocument._textpos - 1))
+		else
 			style = GetStyleToLeftOfCursor()
 		end
 	end

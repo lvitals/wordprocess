@@ -26,7 +26,7 @@ customise bindings, see [Keyboard shortcuts](keyboard-shortcuts.md).
 | Ctrl-Z / Ctrl-Y | Undo and redo |
 | Ctrl-F / Ctrl-K | Find and find next |
 | Ctrl-R | Replace, then find the next match |
-| Ctrl-G | Go to a paragraph, percentage, or named target |
+| Ctrl-G | Open the structural table of contents (H1–H4) |
 | Ctrl-I / Ctrl-U / Ctrl-B / Ctrl-N | Italic, underline, bold, or normal |
 | Ctrl-P | Choose a paragraph style |
 | Ctrl-L | Find the next misspelt word |

@@ -15,11 +15,53 @@ local string_lower = string.lower
 local time = wg.time
 local WriteFile = wg.writefile
 
+local function mapped_paragraphs(document)
+	local position, number = 0, 0
+	return function()
+		local size = document._textbuffer:size()
+		if position > size then return nil end
+		if position == size and size > 0 and
+				document._textbuffer:slice(size-1, 1) ~= "\n" then
+			return nil
+		end
+		local start = position
+		local newline = document._textbuffer:find(start, 10)
+		local finish = newline or size
+		if finish-start > 16*1024*1024 then
+			error("mapped exporter paragraph exceeds the 16 MiB safety limit")
+		end
+		local text = document._textbuffer:slice(start, finish-start)
+		if text:sub(-1) == "\r" then text = text:sub(1, -2) end
+		position = newline and (newline+1) or (size+1)
+		local style = document:largeParagraphStyleAt(start)
+		local boundaries = {start, finish}
+		for _, span in ipairs(document:ensureDocumentIndex().characterStyles or {}) do
+			if span.finish > start and span.start < finish then
+				boundaries[#boundaries+1] = math.max(start, span.start)
+				boundaries[#boundaries+1] = math.min(finish, span.finish)
+			end
+		end
+		table.sort(boundaries)
+		local styled, previous = {}, nil
+		for _, boundary in ipairs(boundaries) do
+			if previous and boundary > previous then
+				local mask = document:largeCharacterStyleAt(previous)
+				if mask ~= 0 then styled[#styled+1] = wg.createstylebyte(mask) end
+				styled[#styled+1] = document._textbuffer:slice(previous, boundary-previous)
+			end
+			previous = boundary
+		end
+		local paragraph = CreateParagraph(style, table.concat(styled))
+		if style == "LN" then number = number + 1; paragraph.number = number end
+		return paragraph
+	end
+end
+
 -- Renders the document by calling the appropriate functions on the cb
 -- table.
 
 function ExportFileUsingCallbacks(document, cb)
-	document:renumber()
+	if not document:usesTextBuffer() then document:renumber() end
 	cb.prologue()
 
 	local listmode= nil
@@ -78,7 +120,16 @@ function ExportFileUsingCallbacks(document, cb)
 		oldbold = bold
 	end
 
-	for _, paragraph in ipairs(document) do
+	local nextparagraph
+	if document:usesTextBuffer() then
+		nextparagraph = mapped_paragraphs(document)
+	else
+		local index = 0
+		nextparagraph = function() index=index+1; return document[index] end
+	end
+	while true do
+		local paragraph = nextparagraph()
+		if not paragraph then break end
 		local name = paragraph.style
 		local style = documentStyles[name]
 
@@ -144,11 +195,6 @@ end
 -- exportcb(writer, document) to actually do the work.
 
 function ExportFileWithUI(filename, title, extension, callback)
-	if currentDocument:usesTextBuffer() then
-		ModalMessage("Export unavailable",
-			"Large mapped text can currently be exported only as plain text.")
-		return false
-	end
 	if not filename then
 		filename = currentDocument.name
 		if filename then
@@ -161,7 +207,7 @@ function ExportFileWithUI(filename, title, extension, callback)
 			filename = "(unnamed)"
 		end
 
-		local filename = FileBrowser(title, "Export as:", true,
+		filename = FileBrowser(title, "Export as:", true,
 			filename)
 		if not filename then
 			return false
@@ -173,19 +219,18 @@ function ExportFileWithUI(filename, title, extension, callback)
 	end
 
 	ImmediateMessage("Exporting "..filename.."...")
-
-        local data= {}
-        local writer = function(...)
-                for _, s in ipairs({...}) do
-                        data[#data+1] = s
-                end
-        end
-
-        callback(writer, currentDocument)
-
-	local _, e = WriteFile(filename, table.concat(data))
-	if e then
+	local output, e = wg.openwriter(filename)
+	if not output then
 		ModalMessage(nil, "Unable to open the output file "..e..".")
+		QueueRedraw()
+		return false
+	end
+	local writer = function(...) return output:write(...) end
+	local ok, exporterror = pcall(callback, writer, currentDocument)
+	local closed, closeerror = output:close()
+	if not ok or not closed then
+		ModalMessage(nil, "Unable to export the output file: "..
+			tostring(exporterror or closeerror))
 		QueueRedraw()
 		return false
 	end

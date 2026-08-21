@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <string.h>
+#include <ctype.h>
 #include <unistd.h>
 #ifndef WIN32
 #include <sys/mman.h>
@@ -22,6 +23,26 @@
 #define TEXTBUFFER_MT "wordprocess.textbuffer"
 #define MAX_LUA_SLICE (16u * 1024u * 1024u)
 #define MAX_HISTORY_BYTES (64u * 1024u * 1024u)
+
+static char save_fault_phase[32];
+
+static bool inject_save_fault(const char* phase)
+{
+    if (!save_fault_phase[0] || strcmp(save_fault_phase, phase) != 0)
+        return false;
+    save_fault_phase[0] = '\0';
+    errno = EIO;
+    return true;
+}
+
+static int set_save_fault_cb(lua_State* L)
+{
+    const char* phase = luaL_optstring(L, 1, "");
+    luaL_argcheck(L, strlen(phase) < sizeof(save_fault_phase), 1,
+        "save fault phase is too long");
+    strcpy(save_fault_phase, phase);
+    return 0;
+}
 
 #ifdef WIN32
 static int push_windows_error(lua_State* L, DWORD code)
@@ -72,6 +93,8 @@ typedef struct
 {
     const unsigned char* mapping;
     size_t mapped_size;
+    size_t content_offset;
+	size_t base_content_size;
     size_t size;
     Piece* pieces;
     Change* undo;
@@ -270,6 +293,28 @@ static int buffer_piece_count_cb(lua_State* L)
     for (Piece* piece = buffer->pieces; piece; piece = piece->next) count++;
     lua_pushnumber(L, (lua_Number)count);
     return 1;
+}
+
+static int buffer_stats_cb(lua_State* L)
+{
+    TextBuffer* buffer = check_buffer(L, 1);
+    size_t words = 0;
+    size_t newlines = 0;
+    bool in_word = false;
+    for (Piece* piece = buffer->pieces; piece; piece = piece->next)
+    {
+        for (size_t i = 0; i < piece->length; i++)
+        {
+            unsigned char c = piece->data[i];
+            bool whitespace = isspace(c) != 0;
+            if (c == '\n') newlines++;
+            if (!whitespace && !in_word) words++;
+            in_word = !whitespace;
+        }
+    }
+    lua_pushnumber(L, (lua_Number)words);
+    lua_pushnumber(L, (lua_Number)(newlines + 1));
+    return 2;
 }
 
 static int buffer_slice_cb(lua_State* L)
@@ -721,7 +766,11 @@ static int move_history(lua_State* L, bool forward)
     lua_pushboolean(L, true);
     lua_pushnumber(L, (lua_Number)(change->position +
         (forward ? change->added_length : change->removed_length)));
-    return 2;
+    lua_pushnumber(L, (lua_Number)(forward
+        ? change->removed_length : change->added_length));
+    lua_pushnumber(L, (lua_Number)(forward
+        ? change->added_length : change->removed_length));
+    return 4;
 }
 
 static int buffer_undo_cb(lua_State* L) { return move_history(L, false); }
@@ -730,7 +779,8 @@ static int buffer_redo_cb(lua_State* L) { return move_history(L, true); }
 /* After every successful save, make the saved file the sole backing store.
  * Path, descriptor/handle, mapping and identity must always describe the same
  * object; otherwise truncating an older Save-As source could SIGBUS us. */
-static bool rebase_after_save(TextBuffer* buffer, const char* filename)
+static bool rebase_after_save(TextBuffer* buffer, const char* filename,
+    size_t content_offset, size_t content_size)
 {
     const unsigned char* new_mapping = NULL;
     size_t new_size = 0;
@@ -775,7 +825,9 @@ static bool rebase_after_save(TextBuffer* buffer, const char* filename)
         }
     }
 #endif
-    new_piece = piece_new(new_mapping, new_size, false);
+    if (content_offset > new_size || content_size > new_size - content_offset)
+        goto error;
+    new_piece = piece_new(new_mapping + content_offset, content_size, false);
     if (!new_piece) goto error;
     char* new_path = (char*)malloc(strlen(filename) + 1);
     if (!new_path) goto error;
@@ -803,7 +855,9 @@ static bool rebase_after_save(TextBuffer* buffer, const char* filename)
     buffer->source_path = new_path;
     buffer->mapping = new_mapping;
     buffer->mapped_size = new_size;
-    buffer->size = new_size;
+    buffer->content_offset = content_offset;
+	buffer->base_content_size = content_size;
+    buffer->size = content_size;
     buffer->pieces = new_piece;
     buffer->modified = false;
     return true;
@@ -874,8 +928,10 @@ static int buffer_save_cb(lua_State* L)
 {
     TextBuffer* buffer = check_buffer(L, 1);
     const char* filename = luaL_checkstring(L, 2);
+    size_t prefix_length = 0;
+    const char* prefix = luaL_optlstring(L, 3, "", &prefix_length);
 #ifndef WIN32
-    if (!buffer->modified && buffer->source_path &&
+    if (!prefix_length && !buffer->modified && buffer->source_path &&
         strcmp(buffer->source_path, filename) == 0)
     {
         lua_pushboolean(L, true);
@@ -946,6 +1002,14 @@ static int buffer_save_cb(lua_State* L)
     DWORD windows_error = ERROR_SUCCESS;
 #endif
     size_t remaining = buffer->size;
+	if (inject_save_fault("temporary")) ok = false;
+#ifndef WIN32
+    if (prefix_length && !write_all(output,
+        (const unsigned char*)prefix, prefix_length)) ok = false;
+#else
+    if (prefix_length && fwrite(prefix, 1, prefix_length, output) != prefix_length)
+        ok = false;
+#endif
     for (Piece* piece = buffer->pieces; piece && ok; piece = piece->next)
     {
         size_t piece_length = piece->length < remaining ? piece->length : remaining;
@@ -962,8 +1026,11 @@ static int buffer_save_cb(lua_State* L)
         errno = EIO;
         ok = false;
     }
+	if (ok && inject_save_fault("write")) ok = false;
 #ifndef WIN32
     if (ok && fsync(output) != 0)
+        ok = false;
+    if (ok && inject_save_fault("sync"))
         ok = false;
     if (close(output) != 0)
         ok = false;
@@ -999,7 +1066,7 @@ static int buffer_save_cb(lua_State* L)
             MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
     if (!replaced)
 #else
-    if (rename(temporary, filename) != 0)
+    if (inject_save_fault("rename") || rename(temporary, filename) != 0)
 #endif
     {
 #ifdef WIN32
@@ -1007,6 +1074,7 @@ static int buffer_save_cb(lua_State* L)
         free(temporary);
         return push_windows_error(L, saved);
 #else
+		remove(temporary);
         free(temporary);
         lua_pushnil(L); lua_pushstring(L, strerror(errno)); return 2;
 #endif
@@ -1033,7 +1101,7 @@ static int buffer_save_cb(lua_State* L)
         free(directory);
     }
 #endif
-    if (!rebase_after_save(buffer, filename))
+    if (!rebase_after_save(buffer, filename, prefix_length, buffer->size))
     {
 #ifdef WIN32
         DWORD saved = GetLastError();
@@ -1046,6 +1114,184 @@ static int buffer_save_cb(lua_State* L)
     }
     lua_pushboolean(L, true);
     return 1;
+}
+
+#define JOURNAL_MAGIC "WordProcess large journal v1\n"
+
+static unsigned long long journal_source_fingerprint(const TextBuffer* buffer)
+{
+    unsigned long long hash = 1469598103934665603ULL;
+    size_t sample = buffer->mapped_size < 4096 ? buffer->mapped_size : 4096;
+    for (size_t i = 0; i < sample; i++)
+        hash = (hash ^ buffer->mapping[i]) * 1099511628211ULL;
+    size_t tail = buffer->mapped_size > sample ? buffer->mapped_size - sample : sample;
+    for (size_t i = tail; i < buffer->mapped_size; i++)
+        hash = (hash ^ buffer->mapping[i]) * 1099511628211ULL;
+    hash = (hash ^ buffer->mapped_size) * 1099511628211ULL;
+    return hash;
+}
+
+static bool journal_header(FILE* fp, unsigned long long* path_length,
+    unsigned long long* content_offset, unsigned long long* base_length,
+    unsigned long long* logical_length, unsigned long long* metadata_length,
+    unsigned long long* piece_count, unsigned long long* fingerprint)
+{
+    char magic[64];
+    char line[128];
+    if (!fgets(magic, sizeof(magic), fp) || strcmp(magic, JOURNAL_MAGIC) != 0)
+        return false;
+#define READ_JOURNAL_FIELD(name, output) \
+    if (!fgets(line, sizeof(line), fp) || \
+        sscanf(line, name ": %llu", output) != 1) return false
+    READ_JOURNAL_FIELD("source-path-length", path_length);
+    READ_JOURNAL_FIELD("content-offset", content_offset);
+    READ_JOURNAL_FIELD("base-content-length", base_length);
+    READ_JOURNAL_FIELD("logical-length", logical_length);
+    READ_JOURNAL_FIELD("metadata-length", metadata_length);
+    READ_JOURNAL_FIELD("piece-count", piece_count);
+	READ_JOURNAL_FIELD("source-fingerprint", fingerprint);
+#undef READ_JOURNAL_FIELD
+    return fgets(line, sizeof(line), fp) && strcmp(line, "\n") == 0;
+}
+
+static int buffer_journal_cb(lua_State* L)
+{
+    TextBuffer* buffer = check_buffer(L, 1);
+    const char* filename = luaL_checkstring(L, 2);
+    size_t metadata_length;
+    const char* metadata = luaL_checklstring(L, 3, &metadata_length);
+    luaL_argcheck(L, buffer->source_path != NULL, 1, "buffer has no source");
+    size_t filename_length = strlen(filename);
+    char* temporary = malloc(filename_length + 5);
+    if (!temporary) return luaL_error(L, "out of memory creating journal path");
+    memcpy(temporary, filename, filename_length);
+    memcpy(temporary + filename_length, ".new", 5);
+    FILE* fp = fopen(temporary, "wb");
+    if (!fp) { free(temporary); lua_pushnil(L); lua_pushstring(L, strerror(errno)); return 2; }
+    size_t pieces = 0;
+    for (Piece* piece = buffer->pieces; piece; piece = piece->next) pieces++;
+    bool ok = fprintf(fp, JOURNAL_MAGIC
+        "source-path-length: %llu\ncontent-offset: %llu\n"
+        "base-content-length: %llu\nlogical-length: %llu\n"
+		"metadata-length: %llu\npiece-count: %llu\nsource-fingerprint: %llu\n\n",
+        (unsigned long long)strlen(buffer->source_path),
+        (unsigned long long)buffer->content_offset,
+        (unsigned long long)buffer->base_content_size,
+        (unsigned long long)buffer->size,
+        (unsigned long long)metadata_length,
+		(unsigned long long)pieces, journal_source_fingerprint(buffer)) > 0;
+    if (ok) ok = fwrite(buffer->source_path, 1, strlen(buffer->source_path), fp) ==
+        strlen(buffer->source_path);
+    if (ok) ok = fwrite(metadata, 1, metadata_length, fp) == metadata_length;
+    for (Piece* piece = buffer->pieces; piece && ok; piece = piece->next)
+    {
+        if (piece->owned)
+        {
+            ok = fprintf(fp, "I %llu\n", (unsigned long long)piece->length) > 0 &&
+                fwrite(piece->data, 1, piece->length, fp) == piece->length;
+        }
+        else
+        {
+            size_t offset = (size_t)(piece->data - buffer->mapping);
+            ok = fprintf(fp, "M %llu %llu\n", (unsigned long long)offset,
+                (unsigned long long)piece->length) > 0;
+        }
+    }
+    if (ok && fflush(fp) != 0) ok = false;
+#ifndef WIN32
+    if (ok && fsync(fileno(fp)) != 0) ok = false;
+#endif
+    if (fclose(fp) != 0) ok = false;
+    if (ok && rename(temporary, filename) != 0) ok = false;
+    if (!ok)
+    {
+        int saved = errno;
+        remove(temporary); free(temporary); errno = saved;
+        lua_pushnil(L); lua_pushstring(L, strerror(errno)); return 2;
+    }
+    free(temporary);
+    lua_pushboolean(L, true);
+    return 1;
+}
+
+static int journal_info_cb(lua_State* L)
+{
+    const char* filename = luaL_checkstring(L, 1);
+    FILE* fp = fopen(filename, "rb");
+    if (!fp) { lua_pushnil(L); lua_pushstring(L, strerror(errno)); return 2; }
+    unsigned long long pathlen, offset, base, logical, metalen, pieces, fingerprint;
+    if (!journal_header(fp, &pathlen, &offset, &base, &logical, &metalen, &pieces,
+			&fingerprint) ||
+        pathlen > 1024*1024 || metalen > MAX_LUA_SLICE ||
+        offset > SIZE_MAX || base > SIZE_MAX || logical > SIZE_MAX)
+    { fclose(fp); lua_pushnil(L); lua_pushstring(L, "invalid large-document journal"); return 2; }
+    char* path = malloc((size_t)pathlen + 1);
+    char* metadata = malloc((size_t)metalen ? (size_t)metalen : 1);
+    if (!path || !metadata || fread(path, 1, (size_t)pathlen, fp) != pathlen ||
+        fread(metadata, 1, (size_t)metalen, fp) != metalen)
+    { free(path); free(metadata); fclose(fp); lua_pushnil(L); lua_pushstring(L, "truncated large-document journal"); return 2; }
+    path[pathlen] = '\0'; fclose(fp);
+    lua_pushstring(L, path); lua_pushnumber(L, (lua_Number)offset);
+    lua_pushnumber(L, (lua_Number)base); lua_pushlstring(L, metadata, (size_t)metalen);
+    free(path); free(metadata);
+    return 4;
+}
+
+static int buffer_apply_journal_cb(lua_State* L)
+{
+    TextBuffer* buffer = check_buffer(L, 1);
+    const char* filename = luaL_checkstring(L, 2);
+    FILE* fp = fopen(filename, "rb");
+    if (!fp) { lua_pushnil(L); lua_pushstring(L, strerror(errno)); return 2; }
+    unsigned long long pathlen, offset, base, logical, metalen, piececount, fingerprint;
+    if (!journal_header(fp, &pathlen, &offset, &base, &logical, &metalen, &piececount,
+			&fingerprint) ||
+        pathlen > 1024*1024 || metalen > MAX_LUA_SLICE || piececount > 10000000 ||
+        offset != buffer->content_offset || base != buffer->base_content_size ||
+        logical > SIZE_MAX || fingerprint != journal_source_fingerprint(buffer))
+        goto invalid;
+    if (fseek(fp, (long)(pathlen + metalen), SEEK_CUR) != 0) goto invalid;
+    Piece* head = NULL;
+    Piece** tail = &head;
+    size_t total = 0;
+    for (unsigned long long index = 0; index < piececount; index++)
+    {
+        int type = fgetc(fp);
+        if (type == 'I')
+        {
+            unsigned long long length;
+			if (fscanf(fp, " %llu", &length) != 1 || length > SIZE_MAX ||
+					fgetc(fp) != '\n') goto badpieces;
+            unsigned char* data = malloc(length ? (size_t)length : 1);
+            if (!data || fread(data, 1, (size_t)length, fp) != length) { free(data); goto badpieces; }
+            *tail = piece_new(data, (size_t)length, true);
+            if (!*tail) { free(data); goto badpieces; }
+        }
+        else if (type == 'M')
+        {
+            unsigned long long mapped_offset, length;
+			if (fscanf(fp, " %llu %llu", &mapped_offset, &length) != 2 ||
+					fgetc(fp) != '\n' ||
+                mapped_offset > buffer->mapped_size || length > buffer->mapped_size-mapped_offset)
+                goto badpieces;
+            *tail = piece_new(buffer->mapping + (size_t)mapped_offset, (size_t)length, false);
+            if (!*tail) goto badpieces;
+        }
+        else goto badpieces;
+        if ((*tail)->length > SIZE_MAX-total) goto badpieces;
+        total += (*tail)->length;
+        tail = &(*tail)->next;
+    }
+    fclose(fp);
+    if (total != (size_t)logical) { pieces_free(head); lua_pushnil(L); lua_pushstring(L, "journal logical length mismatch"); return 2; }
+    pieces_free(buffer->pieces); buffer->pieces = head; buffer->size = total;
+    buffer->modified = true; changes_free(buffer->undo); changes_free(buffer->redo);
+    buffer->undo = buffer->redo = NULL;
+    lua_pushboolean(L, true); return 1;
+badpieces:
+    pieces_free(head);
+invalid:
+    fclose(fp); lua_pushnil(L); lua_pushstring(L, "invalid or truncated large-document journal"); return 2;
 }
 
 static int buffer_source_changed_cb(lua_State* L)
@@ -1098,6 +1344,12 @@ static int buffer_source_safe_cb(lua_State* L)
 static int buffer_open_cb(lua_State* L)
 {
     const char* filename = luaL_checkstring(L, 1);
+    bool has_content_offset = !lua_isnoneornil(L, 2);
+    bool has_content_length = !lua_isnoneornil(L, 3);
+    lua_Number requested_offset_arg = has_content_offset
+        ? luaL_checknumber(L, 2) : 0;
+    lua_Number requested_length_arg = has_content_length
+        ? luaL_checknumber(L, 3) : 0;
     TextBuffer* buffer = (TextBuffer*)lua_newuserdata(L, sizeof(*buffer));
     memset(buffer, 0, sizeof(*buffer));
 #ifndef WIN32
@@ -1151,8 +1403,20 @@ static int buffer_open_cb(lua_State* L)
         goto error;
     }
 #endif
-    buffer->size = buffer->mapped_size;
-    buffer->pieces = piece_new(buffer->mapping, buffer->size, false);
+    lua_Number requested_offset = requested_offset_arg;
+    luaL_argcheck(L, requested_offset >= 0 &&
+        requested_offset <= (lua_Number)buffer->mapped_size, 2,
+        "content offset outside text buffer file");
+    buffer->content_offset = (size_t)requested_offset;
+    lua_Number requested_length = has_content_length ? requested_length_arg :
+        (lua_Number)(buffer->mapped_size - buffer->content_offset);
+    luaL_argcheck(L, requested_length >= 0 &&
+        requested_length <= (lua_Number)(buffer->mapped_size - buffer->content_offset),
+        3, "content length outside text buffer file");
+    buffer->size = (size_t)requested_length;
+	buffer->base_content_size = buffer->size;
+    buffer->pieces = piece_new(buffer->mapping + buffer->content_offset,
+        buffer->size, false);
     if (!buffer->pieces)
         goto error;
     luaL_getmetatable(L, TEXTBUFFER_MT);
@@ -1182,11 +1446,14 @@ void textbuffer_init(void)
     static const luaL_Reg methods[] = {
         {"close", buffer_close_cb}, {"size", buffer_size_cb},
         {"piececount", buffer_piece_count_cb},
+        {"stats", buffer_stats_cb},
         {"slice", buffer_slice_cb}, {"find", buffer_find_cb},
         {"findstring", buffer_findstring_cb},
         {"rfind", buffer_rfind_cb},
         {"insert", buffer_insert_cb}, {"delete", buffer_delete_cb},
         {"save", buffer_save_cb},
+		{"journal", buffer_journal_cb},
+		{"applyjournal", buffer_apply_journal_cb},
         {"sourcechanged", buffer_source_changed_cb},
         {"sourcesafe", buffer_source_safe_cb},
         {"undo", buffer_undo_cb}, {"redo", buffer_redo_cb},
@@ -1200,5 +1467,9 @@ void textbuffer_init(void)
     lua_getglobal(L, "wg");
     lua_pushcfunction(L, buffer_open_cb);
     lua_setfield(L, -2, "opentextbuffer");
+	lua_pushcfunction(L, set_save_fault_cb);
+	lua_setfield(L, -2, "setsavefault");
+	lua_pushcfunction(L, journal_info_cb);
+	lua_setfield(L, -2, "journalinfo");
     lua_pop(L, 1);
 }

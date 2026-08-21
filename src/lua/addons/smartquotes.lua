@@ -168,8 +168,54 @@ end
 
 function Cmd.Smartquotify()
 	if currentDocument:usesTextBuffer() then
-		NonmodalMessage("Smartquotify requires conversion to a structured document.")
-		return false
+		local settings = documentSet.addons.smartquotes or {}
+		local first, last = currentDocument:textSelection()
+		if not first or last <= first then
+			NonmodalMessage("Select text to smartquotify.")
+			return false
+		end
+		if last - first > 16*1024*1024 then
+			NonmodalMessage("Smartquote selection is limited to 16 MiB.")
+			return false
+		end
+		local text = currentDocument._textbuffer:slice(first, last-first)
+		local replacements = {}
+		for offset, quote in text:gmatch('()(["\'])') do
+			local absolute = first + offset - 1
+			if not (settings.notinraw and
+					currentDocument:largeParagraphStyleAt(absolute) == "RAW") then
+				local prefix = text:sub(1, offset-1)
+				local previous = prefix:sub(-1)
+				local opening = previous == "" or previous:match("[%s%c]") or
+					previous == '"' or previous == "'"
+				local replacement
+				if quote == '"' and settings.doublequotes then
+					replacement = opening and settings.leftdouble or settings.rightdouble
+				elseif quote == "'" and settings.singlequotes then
+					replacement = opening and settings.leftsingle or settings.rightsingle
+				end
+				if replacement then
+					replacements[#replacements+1] = {absolute, replacement}
+				end
+			end
+		end
+		if #replacements == 0 then return true end
+		if not Cmd.Checkpoint() then return false end
+		local growth = 0
+		for i = #replacements, 1, -1 do
+			local position, replacement = table.unpack(replacements[i])
+			currentDocument:deleteTextRange(position, 1)
+			currentDocument._textbuffer:insert(position, replacement)
+			currentDocument:adjustLargeStyleSpans(position, 0, #replacement)
+			growth = growth + #replacement - 1
+		end
+		currentDocument._textmark = first
+		currentDocument._textpos = last + growth
+		currentDocument._textchanged = true
+		documentSet:touch()
+		QueueRedraw()
+		NonmodalMessage("Selection smartquotified.")
+		return true
 	end
 	return Cmd.Checkpoint() and
 		Cmd.Copy(true) and
@@ -179,8 +225,52 @@ end
 
 function Cmd.Unsmartquotify()
 	if currentDocument:usesTextBuffer() then
-		NonmodalMessage("Unsmartquotify requires conversion to a structured document.")
-		return false
+		local settings = documentSet.addons.smartquotes or {}
+		local first, last = currentDocument:textSelection()
+		if not first or last <= first then
+			NonmodalMessage("Select text to unsmartquotify.")
+			return false
+		end
+		if last - first > 16*1024*1024 then
+			NonmodalMessage("Smartquote selection is limited to 16 MiB.")
+			return false
+		end
+		local text = currentDocument._textbuffer:slice(first, last-first)
+		local replacements = {}
+		local quotes = {
+			{settings.leftdouble, '"'}, {settings.rightdouble, '"'},
+			{settings.leftsingle, "'"}, {settings.rightsingle, "'"}
+		}
+		for _, pair in ipairs(quotes) do
+			local position = 1
+			while pair[1] and pair[1] ~= "" do
+				local found = text:find(pair[1], position, true)
+				if not found then break end
+				local absolute = first + found - 1
+				if not (settings.notinraw and
+						currentDocument:largeParagraphStyleAt(absolute) == "RAW") then
+					replacements[#replacements+1] = {absolute, #pair[1], pair[2]}
+				end
+				position = found + #pair[1]
+			end
+		end
+		table.sort(replacements, function(a, b) return a[1] > b[1] end)
+		if #replacements == 0 then return true end
+		if not Cmd.Checkpoint() then return false end
+		local shrink = 0
+		for _, replacement in ipairs(replacements) do
+			currentDocument:deleteTextRange(replacement[1], replacement[2])
+			currentDocument._textbuffer:insert(replacement[1], replacement[3])
+			currentDocument:adjustLargeStyleSpans(replacement[1], 0, 1)
+			shrink = shrink + replacement[2] - 1
+		end
+		currentDocument._textmark = first
+		currentDocument._textpos = last - shrink
+		currentDocument._textchanged = true
+		documentSet:touch()
+		QueueRedraw()
+		NonmodalMessage("Selection unsmartquotified.")
+		return true
 	end
 	return Cmd.Checkpoint() and
 		Cmd.Copy(true) and
