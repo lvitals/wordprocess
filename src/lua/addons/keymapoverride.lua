@@ -33,7 +33,7 @@ for key, binding in pairs(navigationdefaults) do
 end
 
 local directdefaults = {
-	AH="Hkeys",
+	["A?"]="Hkeys",
 	AN="ZMODE",
 	["A^H"]="ZL", ["A^J"]="ZD", ["A^K"]="ZU", ["A^L"]="ZR",
 	["A^B"]="ZWL", ["A^W"]="ZWR", ["A^I"]="ZPTAB", ["A^O"]="ZNTAB",

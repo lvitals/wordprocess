@@ -295,7 +295,7 @@ local MainMenu = CreateMenu("Main Menu",
 	M("D",  "D", "Documents >",      nil,  DocumentsMenu),
 	M("Z",  "Z", "Navigation >",     nil,  NavigationMenu),
 	E("ZMODE", "N", "Toggle navigation mode", nil, Cmd.ToggleNavigationMode),
-	E("Hkeys", "H", "Keyboard shortcuts...", nil, Cmd.ShowKeyboardHelp),
+	E("Hkeys", "?", "Keyboard shortcuts...", nil, Cmd.ShowKeyboardHelp),
 })
 
 function GetMenuActionLabel(id)
@@ -460,9 +460,9 @@ function MenuTree.runmenu(self, x, y, menu)
 				elseif (c == "KEY_QUIT") then
 					QuitForcedBySystem()
 					return false
-				elseif (c == "KEY_UP") and (n > 1) then
+				elseif ((c == "KEY_UP") or (c == "K")) and (n > 1) then
 					n = n - 1
-				elseif (c == "KEY_DOWN") and (n < #menu) then
+				elseif ((c == "KEY_DOWN") or (c == "J")) and (n < #menu) then
 					n = n + 1
 				elseif (c == "KEY_SCROLLUP") and (top > 1) then
 					top = top - 1
@@ -478,12 +478,12 @@ function MenuTree.runmenu(self, x, y, menu)
 					n = int(math.min(n + visiblelen/2, #menu))
 				elseif (c == "KEY_PGUP") then
 					n = int(math.max(n - visiblelen/2, 1))
-				elseif (c == "KEY_RETURN") or (c == "KEY_RIGHT") then
+				elseif (c == "KEY_RETURN") or (c == "KEY_RIGHT") or (c == "L") then
 					if (type(menu[n]) ~= "string") then
 						item = menu[n]
 						break
 					end
-				elseif (c == "KEY_LEFT") then
+				elseif (c == "KEY_LEFT") or (c == "H") then
 					return nil
 				elseif (c == "KEY_ESCAPE") then
 					return false

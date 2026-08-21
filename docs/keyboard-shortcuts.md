@@ -1,9 +1,12 @@
 # Keyboard shortcuts
 
 WordProcess shows the shortcuts that are active for the current document set in
-**Main Menu > Keyboard shortcuts** (`Alt-H`, or `Escape` then `H`). This is the
+**Main Menu > Keyboard shortcuts** (`Alt-?`, or `Escape` then `?`). This is the
 best reference after changing a binding. In that window, use `J`/`K` to move by
 line, `H`/`L` to move by page, and `Escape`, `Q`, or `Enter` to close it.
+
+While any menu is open, `H`/`J`/`K`/`L` navigate left/down/up/right, alongside
+the arrow keys.
 
 The names below use `Ctrl`, `Alt`, and `Shift`. A slash separates alternatives;
 `Shift` combined with a movement extends the selection.
@@ -92,7 +95,7 @@ WordProcess provides three equivalent ways to use letter-based navigation:
 | `Shift-D` | `Ctrl-Alt-Shift-D` | Delete the current paragraph |
 | `?` | — | Open the keyboard reference |
 
-`Alt-H` opens the keyboard reference and `Alt-N` toggles Navigation mode.
+`Alt-?` opens the keyboard reference and `Alt-N` toggles Navigation mode.
 Terminal key encoding varies: if a chord is not distinguishable in `wp`, use
 the command layer, Navigation mode, a different binding, or the `xwp` frontend.
 
@@ -191,4 +194,3 @@ the key is used, so copy IDs from `ListMenuItems()` exactly.
   action, check for a startup override, and try the key in the other frontend.
 - An unknown platform key can appear as `UNKNOWN_1234` or a similar name. It
   may still be bound, though its displayed label is less useful.
-

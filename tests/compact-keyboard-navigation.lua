@@ -34,6 +34,8 @@ end
 AssertEquals(true, found_h)
 OverrideKey("COMMAND_H", "ZR")
 AssertEquals("Cursor right", GetShortcutActionLabel("COMMAND_H"))
+AssertEquals("Keyboard shortcuts...", GetShortcutActionLabel("A?"))
+AssertEquals("Unbound", GetShortcutActionLabel("AH"))
 
 NavigationMode = false
 Cmd.ToggleNavigationMode()

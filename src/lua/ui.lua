@@ -120,7 +120,7 @@ function Cmd.ShowKeyboardHelp()
 			GetMenuActionLabel(entry.binding))}
 	end
 	rows[#rows+1] = {label="I / Escape         Return to writing mode"}
-	rows[#rows+1] = {label="Alt-H             Open this help"}
+	rows[#rows+1] = {label="Alt-?             Open this help"}
 	rows[#rows+1] = {label="Alt-N             Enter / leave navigation mode"}
 	rows[#rows+1] = {label=""}
 	rows[#rows+1] = {label="OPTIONAL DIRECT SHORTCUTS (active key map)"}

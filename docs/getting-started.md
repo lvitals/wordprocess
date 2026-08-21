@@ -45,8 +45,9 @@ exists and matches the current file format; otherwise it creates a blank set.
 If a command-line path does not exist, the editor starts a new document set
 with that path already selected for saving.
 
-Press Escape to open the menu. Menu letters choose an entry. Arrow keys move
-the cursor; Shift plus a movement key extends a selection. Printable text is
+Press Escape to open the menu. Menu letters choose an entry. Arrow keys or
+`H`/`J`/`K`/`L` navigate left/down/up/right. Outside menus, arrow keys move the
+cursor; Shift plus a movement key extends a selection. Printable text is
 inserted directly. Space separates words, Return starts a paragraph, and Tab
 inserts editable spacing when enabled.
 
@@ -80,4 +81,3 @@ wp --exec 'print(VERSION)'
 
 See [Import and export](import-export.md) and [Scripting](scripting.md) for the
 precise rules.
-
