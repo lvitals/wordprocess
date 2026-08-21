@@ -18,6 +18,7 @@ do
 				("L:"..(exact and "" or "~")..tostring(linenumber)) or "L:~"
 			terms[#terms+1] = {
 				priority=100,
+				mandatory=true,
 				value=string_format("%s %d%% @%d", line, percent, position),
 				shortvalue=string_format("%s %d%%", line, percent),
 			}

@@ -328,7 +328,9 @@ documentSet = reloadedNative
 currentDocument = reloadedNative.current
 local loadedPageIndex = currentDocument:ensureDocumentIndex().pageLayoutIndex
 AssertNotNull(loadedPageIndex)
-documentSet:touch(true)
+-- Non-layout metadata and rapid navigation must not discard the persisted
+-- sparse line/page indexes.
+documentSet:touch()
 AssertEquals(loadedPageIndex,
 	currentDocument:ensureDocumentIndex().pageLayoutIndex)
 documentSet:clean()
@@ -368,6 +370,14 @@ AssertEquals(1, currentDocument:getPageCount())
 AssertEquals(1, currentDocument:getPageAtPosition(0))
 AssertEquals(0, currentDocument:getPositionForPage(1))
 AssertEquals(nil, currentDocument:getPositionForPage(0))
+for _ = 1, 100 do
+	Cmd.GotoEndOfDocument()
+	AssertEquals(currentDocument:getLineCount(), currentDocument:getLineAtPosition())
+	AssertEquals(currentDocument:getPageCount(), currentDocument:getPageAtPosition())
+	Cmd.GotoBeginningOfDocument()
+	AssertEquals(1, currentDocument:getLineAtPosition())
+	AssertEquals(1, currentDocument:getPageAtPosition())
+end
 local navigationStatus = {}
 FireEvent("BuildStatusBar", navigationStatus)
 local navigationText = {}
@@ -419,6 +429,22 @@ AssertEquals("\0", sparseDocument._textbuffer:slice(sparseSize - 1, 1))
 AssertEquals(math.floor(sparseSize / 2),
 	sparseDocument:getPositionForPercent(50))
 AssertEquals(sparseSize, sparseDocument:getPositionForPercent(100))
+
+-- A metadata-only commit on a >4 GiB sparse container rewrites only its fixed
+-- prefix; it must neither stream nor allocate the logical content size.
+local sparseNativePath = dir.."/sparse-native-4g.wp"
+local sparsePrefix = string.rep("A", 4096)
+AssertEquals(nil, select(2, wg.writefile(sparseNativePath, sparsePrefix)))
+AssertEquals(true, wg.truncatefile(sparseNativePath, sparseSize + #sparsePrefix))
+local sparseNative = assert(wg.opentextbuffer(sparseNativePath,
+	#sparsePrefix, sparseSize))
+AssertEquals(true, sparseNative:saveprefix(sparseNativePath,
+	string.rep("B", #sparsePrefix)))
+AssertEquals(sparseSize + #sparsePrefix, assert(wg.stat(sparseNativePath)).size)
+sparseNative:close()
+local sparseNativeProbe = assert(wg.opentextbuffer(sparseNativePath))
+AssertEquals("BBBB", sparseNativeProbe:slice(0, 4))
+sparseNativeProbe:close()
 documentSet = CreateDocumentSet()
 documentSet.menu = CreateMenuTree()
 documentSet:addDocument(sparseDocument, "Sparse journal")

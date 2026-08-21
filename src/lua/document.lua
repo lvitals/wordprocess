@@ -337,6 +337,8 @@ function Document.adjustLargeStyleSpans(self, position, removed, added)
 	metadata.wordCount = nil
 	metadata.lineCount = nil
 	metadata.lineOffsets = nil
+	metadata.pageLayoutIndex = nil
+	self._pageIndex = nil
 	-- An edit may add or remove newlines. Unknown is preferable to retaining a
 	-- stale absolute line until the next explicit index checkpoint.
 	self._textline, self._texttopline = nil, nil

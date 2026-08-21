@@ -1267,6 +1267,65 @@ static int buffer_save_cb(lua_State* L)
     return 1;
 }
 
+/* Update an unchanged native container's fixed-size metadata prefix without
+ * copying its multi-gigabyte content.  The old prefix is first committed to a
+ * side journal; opening the file recovers that journal if a process dies
+ * between the two fsyncs. */
+static int buffer_save_prefix_cb(lua_State* L)
+{
+    TextBuffer* buffer = check_buffer(L, 1);
+    const char* filename = luaL_checkstring(L, 2);
+    size_t length = 0;
+    const char* prefix = luaL_checklstring(L, 3, &length);
+#ifdef WIN32
+    (void)buffer; (void)filename; (void)prefix; (void)length;
+    lua_pushnil(L); lua_pushstring(L, "metadata-only save is unavailable"); return 2;
+#else
+    if (buffer->modified || !buffer->source_path ||
+        strcmp(buffer->source_path, filename) != 0 ||
+        length != buffer->content_offset)
+    {
+        lua_pushnil(L); lua_pushstring(L, "metadata-only save is not applicable"); return 2;
+    }
+    size_t path_length = strlen(filename);
+    char* journal = malloc(path_length + 20);
+    unsigned char* old = malloc(length ? length : 1);
+    if (!journal || !old) { free(journal); free(old); return luaL_error(L, "out of memory saving metadata"); }
+    sprintf(journal, "%s.wp-prefix-journal", filename);
+    int fd = open(filename, O_RDWR);
+    int jf = -1;
+    bool journal_committed = false;
+    bool ok = fd >= 0 && pread(fd, old, length, 0) == (ssize_t)length;
+    if (ok) jf = open(journal, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (jf < 0) ok = false;
+    if (ok)
+    {
+        ok = write_all(jf, old, length) && fsync(jf) == 0;
+        journal_committed = ok;
+    }
+    if (jf >= 0 && close(jf) != 0) ok = false;
+    if (ok) ok = pwrite(fd, prefix, length, 0) == (ssize_t)length && fsync(fd) == 0;
+    if (ok) (void)unlink(journal);
+    if (!ok && journal_committed && fd >= 0 &&
+        pwrite(fd, old, length, 0) == (ssize_t)length && fsync(fd) == 0)
+        (void)unlink(journal);
+    if (ok)
+    {
+        struct stat st;
+        if (fstat(fd, &st) == 0)
+        {
+            buffer->source_size = st.st_size;
+            buffer->source_mtime = st.st_mtime;
+        }
+    }
+    int saved = errno;
+    if (fd >= 0) close(fd);
+    free(journal); free(old);
+    if (!ok) { errno = saved; lua_pushnil(L); lua_pushstring(L, strerror(errno)); return 2; }
+    lua_pushboolean(L, true); return 1;
+#endif
+}
+
 #define JOURNAL_MAGIC "WordProcess large journal v1\n"
 
 static unsigned long long journal_source_fingerprint(const TextBuffer* buffer)
@@ -1495,6 +1554,37 @@ static int buffer_source_safe_cb(lua_State* L)
 static int buffer_open_cb(lua_State* L)
 {
     const char* filename = luaL_checkstring(L, 1);
+#ifndef WIN32
+    /* A prefix journal means the previous metadata-only save did not reach its
+     * commit point. Restore the known-good prefix before mapping the file. */
+    size_t recovery_path_length = strlen(filename);
+    char* recovery_path = malloc(recovery_path_length + 20);
+    if (recovery_path)
+    {
+        sprintf(recovery_path, "%s.wp-prefix-journal", filename);
+        int recovery = open(recovery_path, O_RDONLY);
+        if (recovery >= 0)
+        {
+            struct stat recovery_stat;
+            if (fstat(recovery, &recovery_stat) == 0 && recovery_stat.st_size > 0 &&
+                (uintmax_t)recovery_stat.st_size <= MAX_LUA_SLICE)
+            {
+                size_t recovery_size = (size_t)recovery_stat.st_size;
+                unsigned char* bytes = malloc(recovery_size);
+                int target = open(filename, O_RDWR);
+                if (bytes && target >= 0 &&
+                    read(recovery, bytes, recovery_size) == (ssize_t)recovery_size &&
+                    pwrite(target, bytes, recovery_size, 0) == (ssize_t)recovery_size &&
+                    fsync(target) == 0)
+                    (void)unlink(recovery_path);
+                if (target >= 0) close(target);
+                free(bytes);
+            }
+            close(recovery);
+        }
+        free(recovery_path);
+    }
+#endif
     bool has_content_offset = !lua_isnoneornil(L, 2);
     bool has_content_length = !lua_isnoneornil(L, 3);
     lua_Number requested_offset_arg = has_content_offset
@@ -1606,6 +1696,7 @@ void textbuffer_init(void)
         {"rfind", buffer_rfind_cb},
         {"insert", buffer_insert_cb}, {"delete", buffer_delete_cb},
         {"save", buffer_save_cb},
+		{"saveprefix", buffer_save_prefix_cb},
 		{"journal", buffer_journal_cb},
 		{"applyjournal", buffer_apply_journal_cb},
         {"sourcechanged", buffer_source_changed_cb},

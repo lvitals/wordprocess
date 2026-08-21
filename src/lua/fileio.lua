@@ -259,7 +259,18 @@ local function SaveLargeWP(filename)
 	-- work starts, not only immediately before the final streaming write.
 	ShowLargeTextSaveMessage(filename)
 	local prefix = BuildLargeWPPrefix(filename)
-	local ok, e = currentDocument._textbuffer:save(filename, prefix)
+	local metadataOnly = not currentDocument._textchanged and
+		filename == currentDocument._textsource and
+		#prefix == currentDocument._textbuffer:contentoffset()
+	local ok, e
+	if metadataOnly then
+		ok, e = currentDocument._textbuffer:saveprefix(filename, prefix)
+	end
+	-- Save As, text edits, unsupported platforms, or a metadata journal error
+	-- retain the existing atomic streaming/reflink path.
+	if not ok then
+		ok, e = currentDocument._textbuffer:save(filename, prefix)
+	end
 	if not ok then
 		documentSet.name = oldname
 		ModalMessage("Cannot save WordProcess document", e or "Unknown error")

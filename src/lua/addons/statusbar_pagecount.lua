@@ -12,6 +12,7 @@ do
 		local page = currentDocument:getPageAtPosition()
 		terms[#terms+1] = {
 			priority=95,
+			mandatory=true,
 			value=pages and string.format("Pg: %d/%d", page, pages) or "Pg: ?/?",
 			shortvalue=pages and string.format("Pg:%d/%d", page, pages) or "Pg:?/?",
 		}
