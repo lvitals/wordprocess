@@ -6,7 +6,7 @@
 wordprocess_tests = [
   'apply-markup', 'argument-parser', 'change-paragraph-style', 'clipboard',
   'compact-keyboard-navigation',
-  'delete-selection', 'escape-strings', 'export-to-html', 'export-to-latex',
+  'delete-selection', 'empty-wordcount', 'escape-strings', 'export-to-html', 'export-to-latex',
   'export-to-markdown', 'export-to-opendocument', 'export-to-org',
   'export-to-text', 'export-to-troff', 'filesystem', 'find-and-replace',
   'fixed-mode-click-preserves-viewport',

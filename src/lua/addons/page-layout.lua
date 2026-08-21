@@ -90,11 +90,12 @@ function PrepareMappedPageIndex(document)
 	if not document or not document:usesTextBuffer() then return nil end
 	local columns, rows = mappedmetrics(document)
 	local stride = 256
-	local offsets, pagecount = document._textbuffer:pageindex(columns, rows, stride)
+	local offsets, pagecount, visualLineCount =
+		document._textbuffer:pageindex(columns, rows, stride)
 	local index = {
 		signature=layoutsignature(document), pageCount=pagecount,
 		pageIndexStride=stride, pageOffsets=offsets,
-		columns=columns, rows=rows,
+		columns=columns, rows=rows, visualLineCount=visualLineCount,
 	}
 	document:ensureDocumentIndex().pageLayoutIndex = index
 	document._pageIndex = index
@@ -157,6 +158,7 @@ function EnsureDocumentPageIndex(document)
 		local saved = document:ensureDocumentIndex().pageLayoutIndex
 		if saved and saved.signature == signature and saved.pageCount and
 			saved.pageIndexStride and saved.columns and saved.rows and
+			saved.visualLineCount and
 			type(saved.pageOffsets) == "table" and #saved.pageOffsets > 0 then
 			document._pageIndex = saved
 			return saved

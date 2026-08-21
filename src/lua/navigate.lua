@@ -154,11 +154,15 @@ end
 function Cmd.GotoEndOfDocument()
 	if currentDocument:usesTextBuffer() then
 		local size = currentDocument._textbuffer:size()
+		local finalLine = currentDocument:getLineCount()
 		currentDocument._textpos = size
 		local start = currentDocument:textLineBounds(size)
 		currentDocument._texttop = start
-		currentDocument._textline = nil
-		currentDocument._texttopline = nil
+		-- The final logical line is already part of the sparse document index.
+		-- Keep it on the cursor and viewport instead of discarding it and making
+		-- the frequently-redrawn margin fall back to "~".
+		currentDocument._textline = finalLine
+		currentDocument._texttopline = finalLine
 		QueueRedraw()
 		return true
 	end

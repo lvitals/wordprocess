@@ -328,6 +328,55 @@ documentSet = reloadedNative
 currentDocument = reloadedNative.current
 local loadedPageIndex = currentDocument:ensureDocumentIndex().pageLayoutIndex
 AssertNotNull(loadedPageIndex)
+-- Typing ordinary text into an indexed native document updates navigation
+-- metadata incrementally. It must not turn the status into ~ words/L:~/Pg:?/?.
+local beforeTypingWords = currentDocument:ensureDocumentIndex().wordCount
+local beforeTypingLines = currentDocument:getLineCount()
+local beforeTypingPages = currentDocument:getPageCount()
+currentDocument._textpos = currentDocument._textbuffer:size()
+AssertEquals(true, Cmd.InsertStringIntoWord("new text"))
+AssertEquals(beforeTypingWords + 2,
+	currentDocument:ensureDocumentIndex().wordCount)
+AssertEquals(beforeTypingLines, currentDocument:getLineCount())
+AssertEquals(beforeTypingPages, currentDocument:getPageCount())
+Cmd.GotoEndOfDocument()
+local editedStatusTerms = {}
+FireEvent("BuildStatusBar", editedStatusTerms)
+local editedStatus = {}
+for _, term in ipairs(editedStatusTerms) do editedStatus[#editedStatus+1] = term.value end
+editedStatus = table.concat(editedStatus, " | ")
+AssertEquals(nil, editedStatus:find("~ words", 1, true))
+AssertEquals(nil, editedStatus:find("L:~", 1, true))
+AssertEquals(nil, editedStatus:find("Pg: ?/?", 1, true))
+AssertEquals(true, Cmd.Undo())
+AssertEquals(beforeTypingWords, currentDocument:ensureDocumentIndex().wordCount)
+AssertEquals(beforeTypingLines, currentDocument:getLineCount())
+AssertEquals(beforeTypingPages, currentDocument:getPageCount())
+AssertEquals(true, Cmd.Redo())
+AssertEquals(beforeTypingWords + 2,
+	currentDocument:ensureDocumentIndex().wordCount)
+AssertEquals(beforeTypingLines, currentDocument:getLineCount())
+AssertEquals(beforeTypingPages, currentDocument:getPageCount())
+local beforeNewlinesPages = currentDocument:getPageCount()
+local beforeNewlinesLines = currentDocument:getLineCount()
+AssertEquals(true, Cmd.InsertStringIntoWord(string.rep("\n", 100)))
+AssertEquals(beforeNewlinesLines + 100, currentDocument:getLineCount())
+AssertEquals(true, currentDocument:getPageCount() > beforeNewlinesPages)
+AssertNotNull(currentDocument:getPageAtPosition())
+local newlineStatusTerms = {}
+FireEvent("BuildStatusBar", newlineStatusTerms)
+local newlineStatus = {}
+for _, term in ipairs(newlineStatusTerms) do newlineStatus[#newlineStatus+1] = term.value end
+newlineStatus = table.concat(newlineStatus, " | ")
+AssertEquals(nil, newlineStatus:find("~ words", 1, true))
+AssertEquals(nil, newlineStatus:find("L:~", 1, true))
+AssertEquals(nil, newlineStatus:find("Pg: ?/?", 1, true))
+AssertEquals(true, Cmd.Undo())
+AssertEquals(beforeNewlinesLines, currentDocument:getLineCount())
+-- Redo/undo of the newline batch must remain incrementally indexable too.
+AssertEquals(true, Cmd.Redo())
+AssertNotNull(currentDocument:getPageCount())
+AssertEquals(true, Cmd.Undo())
 -- Non-layout metadata and rapid navigation must not discard the persisted
 -- sparse line/page indexes.
 documentSet:touch()
@@ -370,6 +419,28 @@ AssertEquals(1, currentDocument:getPageCount())
 AssertEquals(1, currentDocument:getPageAtPosition(0))
 AssertEquals(0, currentDocument:getPositionForPage(1))
 AssertEquals(nil, currentDocument:getPositionForPage(0))
+-- Reproduce the interactive sequence exactly: Alt-N enters navigation mode
+-- and G dispatches KEY_NAV_G. The end jump must retain every cached total and
+-- give the margin an exact top-line number.
+NavigationMode = false
+AssertEquals(true, Cmd.EnterNavigationMode())
+local navigationEnd = assert(documentSet.menu:lookupAccelerator("KEY_NAV_G"))
+AssertEquals(true, navigationEnd())
+AssertEquals(currentDocument:getLineCount(), currentDocument._textline)
+AssertEquals(currentDocument:getLineCount(), currentDocument._texttopline)
+local endStatusTerms = {}
+FireEvent("BuildStatusBar", endStatusTerms)
+local endStatus = {}
+for _, term in ipairs(endStatusTerms) do endStatus[#endStatus+1] = term.value end
+endStatus = table.concat(endStatus, " | ")
+AssertEquals(nil, endStatus:find("~ words", 1, true))
+AssertEquals(nil, endStatus:find("Pg: ?/?", 1, true))
+AssertEquals(nil, endStatus:find("L:~", 1, true))
+AssertEquals(true, endStatus:find(string.format("%d words",
+	currentDocument:ensureDocumentIndex().wordCount), 1, true) ~= nil)
+AssertEquals(true, endStatus:find("Pg: 1/1", 1, true) ~= nil)
+AssertEquals(true, endStatus:find("L:3", 1, true) ~= nil)
+AssertEquals(true, Cmd.ExitNavigationMode())
 for _ = 1, 100 do
 	Cmd.GotoEndOfDocument()
 	AssertEquals(currentDocument:getLineCount(), currentDocument:getLineAtPosition())

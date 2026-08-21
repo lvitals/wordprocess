@@ -847,7 +847,18 @@ local function LoadLargeWPFromFile(filename)
 		end
 	end
 	mapped:ensureDocumentIndex()
-	if not EnsureDocumentPageIndex(mapped) then
+	local navigationIndex = mapped:ensureDocumentIndex()
+	if not navigationIndex.wordCount or not navigationIndex.lineCount or
+			not navigationIndex.lineIndexStride or
+			type(navigationIndex.lineOffsets) ~= "table" or
+			#navigationIndex.lineOffsets == 0 then
+		-- Old/interrupted native metadata may contain the mapped content range
+		-- but no complete navigation index. Do the one bounded-memory rebuild
+		-- while loading; never let the initial cached line 1 conceal that state
+		-- until the first jump to the end of a multi-gigabyte document.
+		ImmediateMessage("Loading document: indexing...")
+		UpdateDocumentIndexes(mapped)
+	elseif not EnsureDocumentPageIndex(mapped) then
 		ImmediateMessage("Loading document: paginating...")
 		PrepareMappedPageIndex(mapped)
 	end

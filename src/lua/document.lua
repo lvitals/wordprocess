@@ -207,7 +207,9 @@ function Document.getLineAtPosition(self, position)
 		if offsets[middle] <= position then checkpoint, low = middle, middle + 1
 		else high = middle - 1 end
 	end
-	local line = (checkpoint - 1) * stride + 1
+	local numbers = index.lineNumbers
+	local line = numbers and numbers[checkpoint] or
+		((checkpoint - 1) * stride + 1)
 	local scan = offsets[checkpoint]
 	while scan < position do
 		local newline = self._textbuffer:find(scan, 10)
@@ -230,9 +232,22 @@ function Document.getPositionForLine(self, line)
 		return nil, "Exact line navigation is unavailable until the document index is refreshed."
 	end
 	if line > index.lineCount then return nil, "Line is beyond the end of the document." end
-	local checkpoint = math.floor((line - 1) / index.lineIndexStride) + 1
+	local checkpoint
+	if index.lineNumbers then
+		local low, high = 1, #index.lineNumbers
+		checkpoint = 1
+		while low <= high do
+			local middle = math.floor((low + high) / 2)
+			if index.lineNumbers[middle] <= line then
+				checkpoint, low = middle, middle + 1
+			else high = middle - 1 end
+		end
+	else
+		checkpoint = math.floor((line - 1) / index.lineIndexStride) + 1
+	end
 	local position = index.lineOffsets[checkpoint]
-	local current = (checkpoint - 1) * index.lineIndexStride + 1
+	local current = index.lineNumbers and index.lineNumbers[checkpoint] or
+		((checkpoint - 1) * index.lineIndexStride + 1)
 	while current < line do
 		local newline = self._textbuffer:find(position, 10)
 		if not newline then return nil, "Line is beyond the end of the document." end
@@ -334,14 +349,112 @@ end
 
 function Document.adjustLargeStyleSpans(self, position, removed, added)
 	local metadata = self:ensureDocumentIndex()
-	metadata.wordCount = nil
-	metadata.lineCount = nil
-	metadata.lineOffsets = nil
-	metadata.pageLayoutIndex = nil
-	self._pageIndex = nil
-	-- An edit may add or remove newlines. Unknown is preferable to retaining a
-	-- stale absolute line until the next explicit index checkpoint.
-	self._textline, self._texttopline = nil, nil
+	local lineDelta, wordDelta, visibleDelta = self._textbuffer:changestats()
+	if lineDelta and metadata.wordCount and metadata.lineCount and
+			metadata.lineOffsets and metadata.lineIndexStride then
+		metadata.wordCount = math.max(0, metadata.wordCount + wordDelta)
+		metadata.lineCount = math.max(1, metadata.lineCount + lineDelta)
+		metadata.lineNumbers = metadata.lineNumbers or {}
+		if #metadata.lineNumbers == 0 then
+			for i = 1, #metadata.lineOffsets do
+				metadata.lineNumbers[i] = (i - 1) * metadata.lineIndexStride + 1
+			end
+		end
+		local byteDelta = added - removed
+		local oldEnd = position + removed
+		for i = #metadata.lineOffsets, 1, -1 do
+			local offset = metadata.lineOffsets[i]
+			if removed > 0 and offset > position and offset < oldEnd then
+				table.remove(metadata.lineOffsets, i)
+				table.remove(metadata.lineNumbers, i)
+			elseif (removed > 0 and offset >= oldEnd) or
+					(removed == 0 and offset > position) then
+				metadata.lineOffsets[i] = offset + byteDelta
+				metadata.lineNumbers[i] = metadata.lineNumbers[i] + lineDelta
+			end
+		end
+		-- Re-layout only the logical line(s) touched by an insertion. This makes
+		-- Enter/newline typing update physical pages without rescanning the
+		-- mapped document. Existing sparse page checkpoints merely translate.
+		local page = self._pageIndex or metadata.pageLayoutIndex
+		local inverse = self._pageEditInverse
+		local inverseMatch = inverse and inverse.position == position and
+			inverse.removed == removed and inverse.added == added
+		local pageSafe = page and page.visualLineCount and
+			(removed == 0 or inverseMatch)
+		local visualRowDelta = 0
+		if pageSafe and inverseMatch then
+			visualRowDelta = inverse.visualRowDelta
+			page.visualLineCount = page.visualLineCount + visualRowDelta
+			page.pageCount = math.max(1, math.floor(
+				(page.visualLineCount - 1) / page.rows) + 1)
+		elseif pageSafe then
+			local start = self:textLineBounds(position)
+			local finish = self._textbuffer:find(position + added, 10) or
+				self._textbuffer:size()
+			if finish - start <= 16 * 1024 * 1024 then
+				local newText = self._textbuffer:slice(start, finish - start)
+				local relative = position - start
+				local oldText = newText:sub(1, relative)..
+					newText:sub(relative + added + 1)
+				local function layoutRows(text)
+					local rows, visible = 0, 0
+					local function finishLine()
+						rows = rows + math.max(1, math.floor(
+							(visible + page.columns - 1) / page.columns))
+						visible = 0
+					end
+					for i = 1, #text do
+						local c = text:byte(i)
+						if c == 10 then finishLine()
+						elseif c >= 0x20 and c ~= 0x7f and
+								(c < 0x80 or c >= 0xc0) then
+							visible = visible + 1
+						end
+					end
+					finishLine()
+					return rows
+				end
+				visualRowDelta = layoutRows(newText) - layoutRows(oldText)
+				local oldCheckpointCount = math.floor((page.pageCount - 1) /
+					page.pageIndexStride) + 1
+				local newVisualLines = page.visualLineCount + visualRowDelta
+				local newPageCount = math.max(1, math.floor(
+					(newVisualLines - 1) / page.rows) + 1)
+				local newCheckpointCount = math.floor((newPageCount - 1) /
+					page.pageIndexStride) + 1
+				pageSafe = oldCheckpointCount == newCheckpointCount
+				if pageSafe then
+					page.visualLineCount = newVisualLines
+					page.pageCount = newPageCount
+				end
+			else pageSafe = false end
+		end
+		if pageSafe then
+			for i, offset in ipairs(page.pageOffsets) do
+				if offset > position then page.pageOffsets[i] = offset + byteDelta end
+			end
+			metadata.pageLayoutIndex, self._pageIndex = page, page
+			self._pageEditInverse = {position=position, removed=added,
+				added=removed, visualRowDelta=-visualRowDelta}
+		else
+			metadata.pageLayoutIndex, self._pageIndex = nil, nil
+			self._pageEditInverse = nil
+		end
+		-- Callers may move the cursor immediately after applying the edit. Do
+		-- not cache its pre-move line; leave cursor lookup to the sparse index.
+		-- The viewport itself has already reached its final position here.
+		self._textline = nil
+		self._texttopline = self:getLineAtPosition(self._texttop)
+	else
+		metadata.wordCount = nil
+		metadata.lineCount = nil
+		metadata.lineOffsets = nil
+		metadata.lineNumbers = nil
+		metadata.pageLayoutIndex = nil
+		self._pageIndex = nil
+		self._textline, self._texttopline = nil, nil
+	end
 	metadata.characterStyles = adjust_spans(metadata.characterStyles,
 		position, removed, added)
 	metadata.paragraphStyles = adjust_spans(metadata.paragraphStyles,
@@ -484,7 +597,9 @@ function Document.renumber(self)
 	local pn = 1
 
 	for _, p in ipairs(self) do
-		wc = wc + #p
+		for _, word in ipairs(p) do
+			if GetWordText(word):find("%S") then wc = wc + 1 end
+		end
 
 		local style = documentStyles[p.style]
 		if style.numbered then

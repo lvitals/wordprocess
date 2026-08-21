@@ -103,6 +103,10 @@ typedef struct
     Change* redo;
     char* source_path;
     bool modified;
+    long long last_line_delta;
+    long long last_word_delta;
+    long long last_visible_delta;
+    bool last_change_stats_valid;
 #ifndef WIN32
     int source_fd;
     dev_t source_device;
@@ -116,6 +120,58 @@ typedef struct
     BY_HANDLE_FILE_INFORMATION source_info;
 #endif
 } TextBuffer;
+
+static Piece* locate(TextBuffer* buffer, size_t pos, Piece** previous,
+    size_t* inner);
+
+static bool buffer_byte_at(TextBuffer* buffer, size_t position, unsigned char* value)
+{
+    if (position >= buffer->size) return false;
+    size_t inner;
+    Piece* piece = locate(buffer, position, NULL, &inner);
+    if (piece && inner == piece->length) { piece = piece->next; inner = 0; }
+    if (!piece) return false;
+    *value = piece->data[inner];
+    return true;
+}
+
+static void count_change_bytes(const unsigned char* data, size_t length,
+    bool left_in_word, bool right_in_word, size_t* words, size_t* lines,
+    size_t* visible)
+{
+    bool in_word = left_in_word;
+    *words = *lines = *visible = 0;
+    for (size_t i = 0; i < length; i++)
+    {
+        unsigned char c = data[i];
+        bool whitespace = isspace(c) != 0;
+        if (!whitespace && !in_word) (*words)++;
+        if (c == '\n') (*lines)++;
+        if (c >= 0x20 && c != 0x7f && (c < 0x80 || c >= 0xc0)) (*visible)++;
+        in_word = !whitespace;
+    }
+    if (right_in_word && !in_word) (*words)++;
+}
+
+static void prepare_change_stats(TextBuffer* buffer, size_t position,
+    const unsigned char* removed, size_t removed_length,
+    const unsigned char* added, size_t added_length)
+{
+    unsigned char left = 0, right = 0;
+    bool left_word = position > 0 && buffer_byte_at(buffer, position - 1, &left) &&
+        !isspace(left);
+    bool right_word = buffer_byte_at(buffer, position + removed_length, &right) &&
+        !isspace(right);
+    size_t old_words, old_lines, old_visible, new_words, new_lines, new_visible;
+    count_change_bytes(removed, removed_length, left_word, right_word,
+        &old_words, &old_lines, &old_visible);
+    count_change_bytes(added, added_length, left_word, right_word,
+        &new_words, &new_lines, &new_visible);
+    buffer->last_word_delta = (long long)new_words - (long long)old_words;
+    buffer->last_line_delta = (long long)new_lines - (long long)old_lines;
+    buffer->last_visible_delta = (long long)new_visible - (long long)old_visible;
+    buffer->last_change_stats_valid = true;
+}
 
 static void changes_free(Change* change)
 {
@@ -328,6 +384,7 @@ static int buffer_stats_cb(lua_State* L)
 typedef struct
 {
     size_t columns, rows, column, row, page, stride;
+    size_t visual_lines;
     size_t next_checkpoint;
     lua_State* L;
     int offsets_table;
@@ -335,6 +392,7 @@ typedef struct
 
 static void page_layout_new_visual_line(PageLayoutScan* scan, size_t offset)
 {
+    scan->visual_lines++;
     if (++scan->row < scan->rows)
         return;
     scan->row = 0;
@@ -360,7 +418,7 @@ static int buffer_page_index_cb(lua_State* L)
         .columns = (size_t)luaL_checknumber(L, 2),
         .rows = (size_t)luaL_checknumber(L, 3),
         .stride = (size_t)luaL_optnumber(L, 4, 256),
-        .page = 1, .L = L,
+        .page = 1, .visual_lines = 1, .L = L,
     };
     luaL_argcheck(L, scan.columns > 0 && scan.rows > 0 && scan.stride > 0,
         2, "invalid physical page dimensions");
@@ -392,7 +450,8 @@ static int buffer_page_index_cb(lua_State* L)
         }
     }
     lua_pushnumber(L, (lua_Number)scan.page);
-    return 2; /* offsets, page count */
+    lua_pushnumber(L, (lua_Number)scan.visual_lines);
+    return 3; /* offsets, page count, visual line count */
 }
 
 static int buffer_page_find_cb(lua_State* L)
@@ -690,6 +749,7 @@ static int buffer_insert_cb(lua_State* L)
         (const unsigned char*)luaL_checklstring(L, 3, &length);
     if (!length) return 0;
     Change* change = change_new(pos, NULL, 0, input, length);
+    prepare_change_stats(buffer, pos, NULL, 0, input, length);
     if (!change || !buffer_insert_raw(buffer, pos, input, length))
     {
         changes_free(change);
@@ -713,6 +773,7 @@ static int buffer_delete_cb(lua_State* L)
     if (!length) return 0;
 	if (length > MAX_HISTORY_BYTES)
 	{
+		buffer->last_change_stats_valid = false;
 		if (!buffer_delete_raw(buffer, start, length))
 			return luaL_error(L, "out of memory deleting from text buffer");
 		changes_free(buffer->undo);
@@ -724,6 +785,7 @@ static int buffer_delete_cb(lua_State* L)
 	}
     unsigned char* removed = buffer_copy(buffer, start, length);
 	Change* change = removed ? change_new_with_removed(start, removed, length) : NULL;
+    if (removed) prepare_change_stats(buffer, start, removed, length, NULL, 0);
     if (!change || !buffer_delete_raw(buffer, start, length))
     {
 		if (!change) free(removed);
@@ -867,6 +929,8 @@ static bool apply_change(TextBuffer* buffer, const Change* change, bool forward)
     size_t remove_length = forward ? change->removed_length : change->added_length;
     const unsigned char* add_data = forward ? change->added : change->removed;
     size_t add_length = forward ? change->added_length : change->removed_length;
+    prepare_change_stats(buffer, change->position, remove_data, remove_length,
+        add_data, add_length);
     (void)remove_data;
     if (remove_length && !buffer_delete_raw(buffer, change->position, remove_length))
         return false;
@@ -878,6 +942,16 @@ static bool apply_change(TextBuffer* buffer, const Change* change, bool forward)
         return false;
     }
     return true;
+}
+
+static int buffer_change_stats_cb(lua_State* L)
+{
+    TextBuffer* buffer = check_buffer(L, 1);
+    if (!buffer->last_change_stats_valid) return 0;
+    lua_pushnumber(L, (lua_Number)buffer->last_line_delta);
+    lua_pushnumber(L, (lua_Number)buffer->last_word_delta);
+    lua_pushnumber(L, (lua_Number)buffer->last_visible_delta);
+    return 3;
 }
 
 static int move_history(lua_State* L, bool forward)
@@ -1695,6 +1769,7 @@ void textbuffer_init(void)
         {"findstring", buffer_findstring_cb},
         {"rfind", buffer_rfind_cb},
         {"insert", buffer_insert_cb}, {"delete", buffer_delete_cb},
+		{"changestats", buffer_change_stats_cb},
         {"save", buffer_save_cb},
 		{"saveprefix", buffer_save_prefix_cb},
 		{"journal", buffer_journal_cb},
