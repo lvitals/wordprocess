@@ -18,7 +18,7 @@ local expected = [[
 \author{(no author)}
 \maketitle
 \section{Heading 1}
-This is \textbf{bold }\textit{\textbf{bolditalic }}\textit{\textbf{\underline{bolditalicunderline }}}\textit{\underline{italicunderline }}\underline{underline} }plain
+This is \textbf{bold }\textit{\textbf{bolditalic }}\textit{\textbf{\underline{bolditalicunderline }}}\textit{\underline{italicunderline }}\underline{underline} plain
 
 normal text
 

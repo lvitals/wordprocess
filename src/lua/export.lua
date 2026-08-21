@@ -87,6 +87,9 @@ function ExportFileUsingCallbacks(document, cb)
 		-- Underline is stopping, so do so *before* the space
 		if wordbreak and not underline and oldunderline then
 			cb.underline_off()
+			-- It has already been closed on the correct side of the space;
+			-- do not close the same inline element again below.
+			oldunderline = false
 		end
 
 		if wordbreak then
