@@ -19,15 +19,15 @@ Cmd.DeleteWord()
 Cmd.AddToUserDictionary()
 AssertTableEquals({"fnord"}, unset(GetUserDictionary()))
 
-documentSet.addons.spellchecker.enabled = false
+GlobalSettings.spellchecker.enabled = false
 local payload = { word="fnord", cstyle=0, ostyle=0 }
 FireEvent("DrawWord", payload)
 AssertTableEquals({"fnord", 0, 0},
 	{payload.word, payload.cstyle, payload.ostyle})
 
-documentSet.addons.spellchecker.enabled = true
-documentSet.addons.spellchecker.useuserdictionary = true
-documentSet.addons.spellchecker.usesystemdictionary = false
+GlobalSettings.spellchecker.enabled = true
+GlobalSettings.spellchecker.useuserdictionary = true
+GlobalSettings.spellchecker.usesystemdictionary = false
 local payload = { word="fnord", cstyle=0, ostyle=0 }
 FireEvent("DrawWord", payload)
 AssertTableEquals({"fnord", 0, 0},
@@ -48,9 +48,9 @@ FireEvent("DrawWord", payload)
 AssertTableEquals({"notfound", wg.DIM, 0},
 	{payload.word, payload.cstyle, payload.ostyle})
 
-documentSet.addons.spellchecker.enabled = true
-documentSet.addons.spellchecker.useuserdictionary = true
-documentSet.addons.spellchecker.usesystemdictionary = true
+GlobalSettings.spellchecker.enabled = true
+GlobalSettings.spellchecker.useuserdictionary = true
+GlobalSettings.spellchecker.usesystemdictionary = true
 AssertEquals(false, IsWordMisspelt("lower", true))
 AssertEquals(false, IsWordMisspelt("Lower", true))
 AssertEquals(false, IsWordMisspelt("lower", false))
@@ -72,8 +72,8 @@ AssertEquals(true, IsWordMisspelt("There’s", false))
 AssertEquals(false, IsWordMisspelt("there’s", true))
 AssertEquals(false, IsWordMisspelt("There’s", true))
 
-documentSet.addons.spellchecker.useuserdictionary = true
-documentSet.addons.spellchecker.usesystemdictionary = true
+GlobalSettings.spellchecker.useuserdictionary = true
+GlobalSettings.spellchecker.usesystemdictionary = true
 local payload = { word="fnord", cstyle=0, ostyle=0 }
 FireEvent("DrawWord", payload)
 AssertTableEquals({"fnord", 0, 0},
@@ -96,4 +96,3 @@ AssertTableEquals({1, 3, 4}, {currentDocument.cp, currentDocument.cw, currentDoc
 Cmd.FindNextMisspeltWord()
 AssertTableEquals({1, 6, 1}, {currentDocument.mp, currentDocument.mw, currentDocument.mo})
 AssertTableEquals({1, 6, 10}, {currentDocument.cp, currentDocument.cw, currentDocument.co})
-

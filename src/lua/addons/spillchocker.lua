@@ -9,6 +9,17 @@ local ChDir = wg.chdir
 local ReadFile = wg.readfile
 
 local USER_DICTIONARY_NAME = "User dictionary"
+local user_dictionary_cache
+local system_dictionary_cache
+
+local function get_spellchecker_settings()
+	GlobalSettings.spellchecker = GlobalSettings.spellchecker or {
+		enabled = false,
+		usesystemdictionary = true,
+		useuserdictionary = true,
+	}
+	return GlobalSettings.spellchecker
+end
 
 -----------------------------------------------------------------------------
 -- Addon registration. Create the default settings in the documentSet.
@@ -23,11 +34,44 @@ do
 	end
 
 	local function cb()
-		documentSet.addons.spellchecker = documentSet.addons.spellchecker or {
-			enabled = false,
-			usesystemdictionary = true,
-			useuserdictionary = true
-		}
+		get_spellchecker_settings()
+		GlobalSettings.userdictionary = GlobalSettings.userdictionary or {}
+		-- Spellchecking is an editor preference. Discard the obsolete per-set
+		-- settings and migrate words from the old hidden dictionary document.
+		if documentSet.addons then
+			documentSet.addons.spellchecker = nil
+		end
+		local legacy
+		for _, candidate in ipairs(documentSet.documents or {}) do
+			if candidate.name == USER_DICTIONARY_NAME then
+				legacy = candidate
+				break
+			end
+		end
+		if legacy and #documentSet.documents > 1 then
+			local known = GetUserDictionary()
+			local migrated = false
+			for _, paragraph in ipairs(legacy) do
+				if paragraph.style == "V" then
+					local word = GetWordSimpleText(paragraph[1])
+					if word ~= "" and not known[word] then
+						GlobalSettings.userdictionary[#GlobalSettings.userdictionary+1] = word
+						known[word], migrated = word, true
+					end
+				end
+			end
+			local index = documentSet:_findDocument(USER_DICTIONARY_NAME)
+			table.remove(documentSet.documents, index)
+			if documentSet._documentIndex then
+				documentSet._documentIndex[USER_DICTIONARY_NAME] = nil
+			end
+			if documentSet.current == legacy then
+				documentSet.current = documentSet.documents[1]
+				currentDocument = documentSet.current
+			end
+			user_dictionary_cache = nil
+			if migrated then SaveGlobalSettings() end
+		end
 
 		GlobalSettings.systemdictionary = GlobalSettings.systemdictionary or {
 			filename = find_default_dictionary()
@@ -42,62 +86,25 @@ end
 -- spellchecking dialogue boxes, etc).
 
 function SpellcheckerOff()
-	local settings = documentSet.addons.spellchecker or {}
+	local settings = get_spellchecker_settings()
 	local state = settings.enabled
 	settings.enabled = false
 	return state
 end
 
 function SpellcheckerRestore(s)
-	local settings = documentSet.addons.spellchecker or {}
+	local settings = get_spellchecker_settings()
 	settings.enabled = s
 end
 
 -----------------------------------------------------------------------------
 -- Utilities.
 
-local user_dictionary_cache
-local system_dictionary_cache
-
-local function get_user_dictionary_document()
-	local d = documentSet:findDocument(USER_DICTIONARY_NAME)
-	if not d then
-		d = CreateDocument()
-		assert(d)
-
-		documentSet:addDocument(d, USER_DICTIONARY_NAME)
-		NonmodalMessage("Creating dictionary in document '"
-				..USER_DICTIONARY_NAME.."'.")
-
-		d[1] = CreateParagraph(
-				"P",
-				SplitString("This is your user dictionary --- place words, "
-						.. "one at a time, in V paragraphs and they will be "
-						.. "considered valid in your document.", "%s")
-			)
-
-		AddEventListener("DocumentModified",
-			function(self, token, document)
-				if (document == d) then
-					user_dictionary_cache = nil
-				end
-			end
-		)
-	end
-	assert(d)
-	return d
-end
-
 function GetUserDictionary()
 	if not user_dictionary_cache then
-		local d = get_user_dictionary_document()
-
 		local c = {}
-		for _, p in ipairs(d) do
-			if (p.style == "V") then
-				local w = GetWordSimpleText(p[1])
-				c[w] = w
-			end
+		for _, word in ipairs(GlobalSettings.userdictionary or {}) do
+			c[word] = word
 		end
 		user_dictionary_cache = c
 	end
@@ -141,7 +148,7 @@ function SetSystemDictionaryForTesting(array)
 end
 
 function IsWordMisspelt(word, firstword)
-	local settings = documentSet.addons.spellchecker or {}
+	local settings = get_spellchecker_settings()
 	if settings.enabled then
 		local misspelt = true
 		local systemdict = {}
@@ -196,15 +203,14 @@ local function add_word_to_user_dictionary(word)
 	word = GetWordSimpleText(word)
 	if word == "" then return true end
 	if (not GetUserDictionary()[word]) and (not GetSystemDictionary()[word]) then
-		local d = get_user_dictionary_document()
-		d:appendParagraph(CreateParagraph("V", word))
-		documentSet:touch()
+		local words = GlobalSettings.userdictionary
+		words[#words+1] = word
 		user_dictionary_cache = nil
+		SaveGlobalSettings()
 		NonmodalMessage("Word '"..word.."' added to user dictionary")
 	else
 		NonmodalMessage("Word '"..word.."' already in user dictionary")
 	end
-	documentSet:touch()
 	QueueRedraw()
 	return true
 end
@@ -344,7 +350,7 @@ end
 -- Per-document set configuration user interface.
 
 function Cmd.ConfigureSpellchecker()
-	local settings = documentSet.addons.spellchecker or {}
+	local settings = get_spellchecker_settings()
 
 	local highlight_checkbox =
 		Form.Checkbox {
@@ -420,7 +426,7 @@ function Cmd.ConfigureSpellchecker()
 	settings.usesystemdictionary = systemdictionary_checkbox.value
 	system_dictionary_cache = nil
 	settings.useuserdictionary = userdictionary_checkbox.value
-	documentSet:touch()
+	SaveGlobalSettings()
 	return true
 end
 

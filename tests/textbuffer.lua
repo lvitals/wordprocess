@@ -632,7 +632,7 @@ AssertEquals(true, Cmd.Unsmartquotify())
 AssertEquals('"quoted"', clipDocument._textbuffer:slice(0, 8))
 
 -- Offline spellchecking scans mapped content in bounded windows and wraps.
-documentSet.addons.spellchecker = {
+GlobalSettings.spellchecker = {
 	enabled=true, usesystemdictionary=true, useuserdictionary=false
 }
 SetSystemDictionaryForTesting({"quoted", "hello", "world"})

@@ -40,6 +40,14 @@ local PARAGRAPHCLASS = 102
 local WORDCLASS = 103
 local MENUCLASS = 104
 
+-- DocumentSet also represents the live editor session. Native files only get
+-- the document-bearing part; UI state must stay with the editor.
+local DOCUMENTSET_FILE_PROPERTIES = {
+	addons = true,
+	documents = true,
+	fileformat = true,
+}
+
 local function writetostreamt(object, write)
 	local writeo = function(k, v)
 		write(k)
@@ -61,7 +69,8 @@ local function writetostreamt(object, write)
 				local keys = {}
 				for k in pairs(t) do
 					if (type(k) ~= "number") then
-						if not k:find("^_") then
+						if not k:find("^_") and
+							(m ~= DocumentSet or DOCUMENTSET_FILE_PROPERTIES[k]) then
 							keys[#keys+1] = k
 						end
 					end
@@ -750,6 +759,16 @@ local function loadfromstreamt(fp)
 	end
 	data.current = data.documents[data.current ]
 
+	-- Accept legacy files, but ignore editor-session fields embedded by older
+	-- versions. Cmd.LoadDocumentSet below installs the current editor state.
+	if #data.documents > 0 then
+		data.name = nil
+		data.menu = CreateMenuTree()
+		data.statusbar = true
+		data.findtext = nil
+		data.replacetext = nil
+	end
+
 	-- Remove any clipboard (unused).
 	data.clipboard = nil
 
@@ -947,6 +966,8 @@ function Cmd.LoadDocumentSet(filename)
 
 	assert(filename)
 	ImmediateMessage("Loading "..filename.."...")
+	local editorMenu = documentSet.menu
+	local editorStatusbar = documentSet.statusbar
 	local d, e = loaddocument(filename)
 	if not d then
 		if not e then
@@ -979,6 +1000,9 @@ function Cmd.LoadDocumentSet(filename)
 		documentSet.menu = CreateMenuTree()
 	end
 	FireEvent("RegisterAddons")
+	-- Loading a document must not replace this editor instance's preferences.
+	documentSet.menu = editorMenu or CreateMenuTree()
+	documentSet.statusbar = editorStatusbar ~= false
 	-- Registering missing addon defaults marks the set for compatibility, but
 	-- does not alter document content or physical layout. Keep the page index
 	-- that was loaded or rebuilt moments ago.
@@ -996,8 +1020,8 @@ function Cmd.LoadDocumentSet(filename)
 			"You are trying to open a file belonging to an earlier "..
 			"version of WordProcess. That's not a problem, but if you "..
 			"save the file again it may not work on the old version. "..
-			"Also, all keybindings defined in this file will get reset "..
-			"to their default values.")
+			"Editor keybindings and other interface preferences are kept "..
+			"separately and are not changed by the document.")
 	end
 
 	-- The document is NOT dirty immediately after a load.

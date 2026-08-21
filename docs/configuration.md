@@ -9,7 +9,6 @@
 | `~/.wordprocess/startup.lua` | User Lua configuration loaded before the UI |
 | `~/.wordprocess/settings.dat` | Serialised global settings |
 | `~/.wordprocess/templates/` | User templates and optional `default.wp` |
-| `~/.wordprocess/user.dictionary` | User spelling dictionary, when enabled |
 
 `startup.lua` can also define machine-wide keyboard overrides. See
 [Keyboard shortcuts](keyboard-shortcuts.md#machine-wide-overrides-with-lua) for
@@ -41,14 +40,19 @@ status terms are also stored globally.
 
 ## Per-set and per-document settings
 
-Autosave, scrapbook, smart quotes, spellchecker, clipboard, status-bar
-visibility, and user dictionary belong to the document set and travel with its
-`.wp` file. Page layout, its physical `Pg:` calculation, cursor, margin display
+Autosave, scrapbook, and smart quotes belong to the document set and travel
+with its `.wp` file. Page layout, its physical `Pg:` calculation, cursor, margin display
 mode, and content belong to each document.
 
 HTML export has its own document-set configuration controlling generated HTML.
 Because exporters consume structural paragraph styles, presentation settings
 do not alter native content.
+
+Menu accelerators, status-bar visibility, search/replace text, spellchecker
+preferences, user-dictionary words, and the local file path are editor state.
+They are not written into `.wp` files. When an older file contains a hidden
+`User dictionary` document, its words are migrated to global settings and that
+internal document is removed.
 
 ## Frontend and locale behaviour
 

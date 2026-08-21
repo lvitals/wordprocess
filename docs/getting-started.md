@@ -51,9 +51,10 @@ cursor; Shift plus a movement key extends a selection. Printable text is
 inserted directly. Space separates words, Return starts a paragraph, and Ctrl-T
 inserts editable spacing when enabled.
 
-Save with Ctrl-S and exit with Ctrl-Q. A native save writes the entire document
-set, including all documents, document settings, page layouts, clipboard data,
-and enabled add-on settings.
+Save with Ctrl-S and exit with Ctrl-Q. A native save writes the document set,
+including its documents, document settings, page layouts, and enabled per-set
+add-on settings. Editor-session state and spelling dictionaries stay outside
+the `.wp` file.
 
 ## Editing model
 

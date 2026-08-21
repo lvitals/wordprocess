@@ -4,8 +4,10 @@
 
 A `.wp` file is a compressed native object graph identified as WordProcess
 file format 8. It stores an ordered list of uniquely named documents, the
-current document, clipboard content, menu accelerators, set-level add-on
-settings, and per-document state. Saves are staged through a sibling `.new`
+current document, set-level add-on settings, and per-document state. Editor
+state such as menu accelerators, status-bar visibility, search text, spelling
+preferences, and the machine-local filename is kept outside the document.
+Saves are staged through a sibling `.new`
 file before replacement to reduce the chance of leaving a partially written
 file.
 
@@ -81,8 +83,10 @@ Smart quotes can independently transform single and double quotation marks.
 The default curly pairs are “/” and ‘/’. Transformation can be disabled inside
 `RAW` paragraphs. Existing selections can be converted in either direction.
 
-Spellchecking can highlight unknown words, use a system dictionary, use a
-per-set user dictionary, or combine them. A system dictionary is selected
-globally; bundled American/Canadian and British dictionaries are installed as
-resources. The `Pg:` status field uses the physical page layout configured for
+Spellchecking can highlight unknown words and combine a system dictionary with
+the editor's user dictionary. Both dictionaries and spelling preferences are
+global editor configuration and do not travel inside a `.wp` file. Older
+hidden `User dictionary` documents are migrated and removed when opened.
+Bundled American/Canadian and British dictionaries are installed as resources.
+The `Pg:` status field uses the physical page layout configured for
 the document; it is independent from the paragraph/style position field.
