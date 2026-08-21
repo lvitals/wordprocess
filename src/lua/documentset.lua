@@ -44,6 +44,7 @@ end
 DocumentSet.touch = function(self)
 	self._changed = true
 	self._justchanged = true
+	if currentDocument then currentDocument._pageIndex = nil end
 end
 
 DocumentSet.clean = function(self)
@@ -176,4 +177,3 @@ end
 DocumentSet.getClipboard = function(self)
 	return self.clipboard
 end
-

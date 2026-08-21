@@ -26,7 +26,7 @@ customise bindings, see [Keyboard shortcuts](keyboard-shortcuts.md).
 | Ctrl-Z / Ctrl-Y | Undo and redo |
 | Ctrl-F / Ctrl-K | Find and find next |
 | Ctrl-R | Replace, then find the next match |
-| Ctrl-G | Open Go To: H1–H4 contents, estimated page, line, or percentage |
+| Ctrl-G | Open Go To: H1–H4 contents, physical page, line, or percentage |
 | Ctrl-I / Ctrl-U / Ctrl-B / Ctrl-N | Italic, underline, bold, or normal |
 | Ctrl-P | Choose a paragraph style |
 | Ctrl-L | Find the next misspelt word |
@@ -88,10 +88,11 @@ headings and ordinary body paragraphs are omitted. Use Tab and Shift-Tab to
 move between that list and the numeric Page, Line, and Percentage fields. Page
 1 and Line 1 start at the beginning; percentages accept 0 through 100.
 
-Pages are estimated logical pages, calculated as
-`ceil(cached word count / configured words per page)`. Go To and the status bar
-use the same estimate and position conversion; they are not physical rendered
-pages.
+Pages are laid out from the configured paper dimensions, margins, body or
+special font size, line spacing, long-quote indentation, paragraph style and
+text wrapping. Go To and the `Pg:` status field use the same cached page
+boundaries. The existing `P:`, `H1:`, `H2:`, `H3:` or `H4:` field remains the
+current paragraph style followed by current/total paragraphs.
 
 ## Display behaviour
 
@@ -101,10 +102,10 @@ and font size. Long words are either moved intact or visually hyphenated.
 Scrolling can keep the cursor fixed while content moves or jump the viewport.
 
 The status bar combines available terms by priority: document name and modified
-state, cursor position, word count, estimated current/total page (`Page~`),
+state, cursor position, word count, physical current/total page (`Pg:`),
 logical line, the single authoritative position percentage, character style,
 and optional debugging information. Existing fields keep their ordering and
-priority. The page label contracts to `Pg~` on narrower terminals.
+priority. Its compact spelling removes the space after `Pg:`.
 
 Both frontends accept mouse selection. Pressing starts a mark, dragging extends
 it, and a click without a drag clears it. The graphical frontend also receives

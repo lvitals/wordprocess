@@ -8,20 +8,13 @@
 
 do
 	local function cb(event, token, terms)
-		local settings = documentSet.addons.pagecount or {}
-		if settings.enabled then
-			local pages = currentDocument:getPageCount()
-			local page = currentDocument:getPageAtPosition()
-			local label = ScreenWidth and ScreenWidth < 100 and "Pg~" or "Page~"
-			terms[#terms+1] = {
-				priority=95,
-				-- The tilde makes the existing words-per-page estimate explicit.
-				value=pages and string.format("%s %d/%d", label, page, pages) or
-					(label.." ?/?"),
-				shortvalue=pages and string.format("Pg~ %d/%d", page, pages) or
-					"Pg~ ?/?",
-			}
-		end
+		local pages = currentDocument:getPageCount()
+		local page = currentDocument:getPageAtPosition()
+		terms[#terms+1] = {
+			priority=95,
+			value=pages and string.format("Pg: %d/%d", page, pages) or "Pg: ?/?",
+			shortvalue=pages and string.format("Pg:%d/%d", page, pages) or "Pg:?/?",
+		}
 	end
 
 	AddEventListener("BuildStatusBar", cb)
@@ -32,10 +25,9 @@ end
 
 do
 	local function cb()
-		documentSet.addons.pagecount = documentSet.addons.pagecount or {
-			enabled = false,
-			wordsperpage = 250,
-		}
+		-- Retain the addon table for file compatibility. Physical pagination is
+		-- configured exclusively by Configure Page Layout.
+		documentSet.addons.pagecount = documentSet.addons.pagecount or {}
 	end
 
 	AddEventListener("RegisterAddons", cb)
@@ -45,69 +37,5 @@ end
 -- Configuration user interface.
 
 function Cmd.ConfigurePageCount()
-	local settings = documentSet.addons.pagecount
-
-	local enabled_checkbox =
-		Form.Checkbox {
-			x1 = 1, y1 = 1,
-			x2 = -1, y2 = 1,
-			label = "Show approximate page count",
-			value = settings.enabled
-		}
-
-	local count_textfield =
-		Form.TextField {
-			x1 = -11, y1 = 3,
-			x2 = -1, y2 = 3,
-			value = tostring(settings.wordsperpage),
-			numeric = true,
-		}
-
-	local dialogue=
-	{
-		title = "Configure Page Count",
-		width = "large",
-		height = 5,
-		stretchy = false,
-
-		actions = {
-			["KEY_RETURN"] = "confirm",
-			["KEY_ENTER"] = "confirm",
-		},
-
-		widgets = {
-			enabled_checkbox,
-
-			Form.Label {
-				x1 = 1, y1 = 3,
-				x2 = 32, y2 = 3,
-				align = "left",
-				value = "Number of words per page:"
-			},
-			count_textfield,
-		}
-	}
-
-	while true do
-		local result = Form.Run(dialogue, RedrawScreen,
-			"SPACE to toggle, RETURN to confirm, "..ESCAPE_KEY.." to cancel")
-		if not result then
-			return false
-		end
-
-		local enabled = enabled_checkbox.value
-		local wordsperpage = tonumber(count_textfield.value)
-
-		if not wordsperpage then
-			ModalMessage("Parameter error", "The number of words per page must be a valid number.")
-		else
-			settings.enabled = enabled
-			settings.wordsperpage = wordsperpage
-			documentSet:touch()
-
-			return true
-		end
-	end
-
-	return false
+	return Cmd.ConfigurePageLayout()
 end

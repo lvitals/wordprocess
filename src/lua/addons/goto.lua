@@ -46,7 +46,7 @@ local function gotobrowser(data, index, values)
 			},
 
 			browser,
-			Form.Label {x1=1, y1=-6, x2=20, y2=-6, value="Page (estimated)"},
+			Form.Label {x1=1, y1=-6, x2=20, y2=-6, value="Page"},
 			pagefield,
 			Form.Label {x1=1, y1=-4, x2=20, y2=-4, value="Line"},
 			linefield,

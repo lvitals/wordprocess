@@ -40,7 +40,7 @@ The names below use `Ctrl`, `Alt`, and `Shift`. A slash separates alternatives;
 | `Ctrl-F` | Open Find and Replace |
 | `Ctrl-K` | Find the next match |
 | `Ctrl-R` | Replace the current match, then find the next one |
-| `Ctrl-G` | Go to an H1–H4 heading, estimated page, line, or percentage |
+| `Ctrl-G` | Go to an H1–H4 heading, physical page, line, or percentage |
 | `Ctrl-L` | Find the next misspelt word |
 | `Ctrl-M` | Add the current word to the user dictionary |
 

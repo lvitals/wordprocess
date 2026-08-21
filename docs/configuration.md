@@ -41,10 +41,10 @@ status terms are also stored globally.
 
 ## Per-set and per-document settings
 
-Autosave, scrapbook, smart quotes, spellchecker, approximate page count,
-clipboard, status-bar visibility, and user dictionary belong to the document
-set and travel with its `.wp` file. Page layout, cursor, margin display mode,
-and content belong to each document.
+Autosave, scrapbook, smart quotes, spellchecker, clipboard, status-bar
+visibility, and user dictionary belong to the document set and travel with its
+`.wp` file. Page layout, its physical `Pg:` calculation, cursor, margin display
+mode, and content belong to each document.
 
 HTML export has its own document-set configuration controlling generated HTML.
 Because exporters consume structural paragraph styles, presentation settings

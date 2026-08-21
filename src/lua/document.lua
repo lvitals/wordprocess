@@ -275,33 +275,25 @@ function Document.getPositionForPercent(self, percent)
 	return position
 end
 
-function Document.getWordsPerPage(self)
-	local settings = documentSet and documentSet.addons and documentSet.addons.pagecount or {}
-	local words = tonumber(settings.wordsperpage) or 250
-	return math.max(1, words)
-end
-
 function Document.getPageCount(self)
-	local words = self:usesTextBuffer() and self:ensureDocumentIndex().wordCount or
-		self.wordcount
-	if words == nil then return nil end
-	return math.max(1, math.ceil(words / self:getWordsPerPage()))
+	local index = EnsureDocumentPageIndex(self)
+	return index and index.pageCount
 end
 
 function Document.getPageAtPosition(self, position)
-	local pages = self:getPageCount()
-	if not pages then return nil end
-	return math.min(pages, math.floor(self:getPositionPercent(position) * pages / 100) + 1)
+	local index = EnsureDocumentPageIndex(self)
+	if not index then return nil end
+	return GetDocumentPageAtPosition(self, index, position)
 end
 
 function Document.getPositionForPage(self, page)
 	if type(page) ~= "number" or page ~= math.floor(page) or page < 1 then
 		return nil, "Page must be a positive whole number."
 	end
-	local pages = self:getPageCount()
-	if not pages then return nil, "Estimated page count is currently unavailable." end
-	if page > pages then return nil, "Page is beyond the end of the document." end
-	return self:getPositionForPercent((page - 1) * 100 / pages)
+	local index = EnsureDocumentPageIndex(self)
+	if not index then return nil, "Page layout index is currently unavailable." end
+	if page > index.pageCount then return nil, "Page is beyond the end of the document." end
+	return GetDocumentPositionForPage(self, index, page)
 end
 
 function Document.gotoNavigationPosition(self, position, line)
@@ -310,7 +302,11 @@ function Document.gotoNavigationPosition(self, position, line)
 		self._textline, self._texttopline = line, line
 		Cmd.UnsetMark()
 	else
-		self.cp, self.cw, self.co = position, 1, 1
+		if type(position) == "table" then
+			self.cp, self.cw, self.co = position.p, position.w, position.o
+		else
+			self.cp, self.cw, self.co = position, 1, 1
+		end
 	end
 	QueueRedraw()
 	return true

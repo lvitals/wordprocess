@@ -83,7 +83,8 @@ storage.
 
 Native saves also scan the piece sequence with constant auxiliary memory to
 refresh exact word and logical-line counts plus sparse newline checkpoints.
-Those cached values drive the status bar and estimated page count. Editing
+Those cached values drive the status bar. Physical pagination is maintained in
+a separate layout index; it is never derived from words or paragraphs. Editing
 invalidates them immediately, so the
 interface shows an unknown count rather than stale data until the next native
 checkpoint rebuilds the index.
@@ -138,11 +139,12 @@ complete body. Line lookup starts at the nearest sparse newline checkpoint and
 performs a bounded forward scan. Percentage lookup uses 64-bit byte positions
 and backs up to a UTF-8 boundary.
 
-The page model is deliberately an estimated logical model:
-`ceil(cached words / configured words per page)`. Both Go To and the status bar
-call the same document navigation API. Frequent status redraws use cached
-totals, sparse lookups, and arithmetic only; they never rebuild the index or
-scan the whole mapped file. Clipboard-backed
+Go To and the `Pg:` status field call the same physical-page navigation API.
+Page dimensions, margins, font sizes, line spacing, indentation, styles and
+wrapping determine its boundaries. Frequent status redraws use only the cached
+layout index; they never rebuild it or scan the whole mapped file. If a mapped
+document has no valid persisted index, `Pg: ?/?` is shown rather than a false
+word-, line-, percentage-, or paragraph-based result. Clipboard-backed
 scrapbook actions and the character-style status indicator also work with
 scalable storage.
 

@@ -49,6 +49,7 @@ function ApplyPageLayoutProfile(document, profile)
 		layout[key] = value
 	end
 	layout.profile = profile
+	document._pageIndex = nil
 	return layout
 end
 
@@ -62,6 +63,123 @@ function GetDocumentTextWidthColumns(document)
 		layout.marginRightCm
 	local cmpercolumn = layout.fontSizePt * 0.0352778 * 0.5
 	return math.max(20, math.floor(printablecm / cmpercolumn + 0.5))
+end
+
+local CM_TO_PT = 72 / 2.54
+local SPECIAL_STYLES = {Q=true, N=true, C=true}
+
+local function layoutsignature(document)
+	local l = GetDocumentPageLayout(document)
+	return table.concat({l.pageWidthCm, l.pageHeightCm, l.marginTopCm,
+		l.marginRightCm, l.marginBottomCm, l.marginLeftCm, l.fontSizePt,
+		l.lineSpacing, l.specialFontSizePt, l.specialLineSpacing,
+		l.longQuoteIndentCm}, ":")
+end
+
+local function stylemetrics(document, style)
+	local layout = GetDocumentPageLayout(document)
+	local special = SPECIAL_STYLES[style]
+	local fontsize = special and layout.specialFontSizePt or layout.fontSizePt
+	local spacing = special and layout.specialLineSpacing or layout.lineSpacing
+	local usablecm = layout.pageWidthCm - layout.marginLeftCm - layout.marginRightCm
+	if style == "Q" then usablecm = usablecm - layout.longQuoteIndentCm end
+	local columns = math.max(1, math.floor(
+		usablecm / (fontsize * 0.0352778 * 0.5) + 0.5))
+	return columns, fontsize * spacing
+end
+
+local function linetarget(lines, pn, line)
+	local data = lines[line]
+	local offset = data.fragment and data.fragment.start or 1
+	return {p=pn, line=line, w=data.wn or data[1] or 1, o=offset}
+end
+
+local function buildstructuredpageindex(document)
+	local layout = GetDocumentPageLayout(document)
+	local usableheight = (layout.pageHeightCm - layout.marginTopCm -
+		layout.marginBottomCm) * CM_TO_PT
+	usableheight = math.max(1, usableheight)
+	local starts = {{p=1, line=1, w=1, o=1}}
+	local used = 0
+	for pn, paragraph in ipairs(document) do
+		local width, lineheight = stylemetrics(document, paragraph.style)
+		local lines = paragraph:wrap(width).lines
+		local gap = document:spaceAbove(pn) * lineheight
+		if used > 0 and used + gap > usableheight then
+			starts[#starts+1] = linetarget(lines, pn, 1)
+			used = 0
+		else
+			used = used + gap
+		end
+		for line = 1, #lines do
+			if used > 0 and used + lineheight > usableheight then
+				starts[#starts+1] = linetarget(lines, pn, line)
+				used = 0
+			end
+			used = used + lineheight
+		end
+	end
+	return {signature=layoutsignature(document), pageCount=#starts, starts=starts}
+end
+
+function EnsureDocumentPageIndex(document)
+	document = document or currentDocument
+	local signature = layoutsignature(document)
+	if document._pageIndex and document._pageIndex.signature == signature then
+		return document._pageIndex
+	end
+	if document:usesTextBuffer() then
+		local saved = document:ensureDocumentIndex().pageLayoutIndex
+		if saved and saved.signature == signature then return saved end
+		-- Native mapped documents are never synchronously repaginated by a
+		-- status redraw. Use a valid persisted bounded page index when present.
+		return nil
+	end
+	document._pageIndex = buildstructuredpageindex(document)
+	return document._pageIndex
+end
+
+function GetDocumentPageAtPosition(document, index, position)
+	if document:usesTextBuffer() then
+		local cursor = position or document._textpos
+		local starts = index.starts or index.pageOffsets
+		local page = 1
+		for i, start in ipairs(starts) do
+			local offset = type(start) == "table" and start.offset or start
+			if offset > cursor then break end
+			page = i
+		end
+		return page
+	end
+	local p, w, o = document.cp, document.cw, document.co
+	if type(position) == "table" then p, w, o = position.p, position.w, position.o end
+	local paragraph = document[p]
+	local width = stylemetrics(document, paragraph.style)
+	local lines = paragraph:wrap(width).lines
+	local line = 1
+	for number, data in ipairs(lines) do
+		local found = false
+		if data.fragment and data.wn == w then
+			found = o >= data.fragment.start and o <= data.fragment.finish
+		else
+			for _, word in ipairs(data) do if word == w then found = true; break end end
+		end
+		if found then line = number; break end
+	end
+	local page = 1
+	for i, start in ipairs(index.starts) do
+		if start.p > p or (start.p == p and start.line > line) then break end
+		page = i
+	end
+	return page
+end
+
+function GetDocumentPositionForPage(document, index, page)
+	local start = assert((index.starts or index.pageOffsets)[page])
+	if document:usesTextBuffer() then
+		return type(start) == "table" and start.offset or start
+	end
+	return {p=start.p, w=start.w, o=start.o}
 end
 
 local function find(list, value)

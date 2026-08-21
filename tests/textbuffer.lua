@@ -344,20 +344,16 @@ AssertEquals(currentDocument._textbuffer:size(),
 local middlePosition = assert(currentDocument:getPositionForPercent(50))
 local middleByte = currentDocument._textbuffer:slice(middlePosition, 1):byte()
 AssertEquals(true, not middleByte or middleByte < 0x80 or middleByte >= 0xc0)
-documentSet.addons.pagecount = {enabled=true, wordsperpage=2}
-AssertEquals(3, currentDocument:getPageCount())
-AssertEquals(1, currentDocument:getPageAtPosition(0))
-AssertEquals(3, currentDocument:getPageAtPosition(currentDocument._textbuffer:size()))
-AssertEquals(0, currentDocument:getPositionForPage(1))
+-- A mapped document without a persisted physical-layout index reports an
+-- unknown page rather than falling back to words, lines, or paragraphs.
+AssertEquals(nil, currentDocument:getPageCount())
 AssertEquals(nil, currentDocument:getPositionForPage(0))
-AssertEquals(nil, currentDocument:getPositionForPage(4))
 local navigationStatus = {}
 FireEvent("BuildStatusBar", navigationStatus)
 local navigationText = {}
 for _, term in ipairs(navigationStatus) do navigationText[#navigationText+1] = term.value end
 navigationText = table.concat(navigationText, " | ")
-AssertEquals(true, navigationText:find("Pg~ 1/3", 1, true) ~= nil or
-	navigationText:find("Page~ 1/3", 1, true) ~= nil)
+AssertEquals(true, navigationText:find("Pg: ?/?", 1, true) ~= nil)
 local _, percentages = navigationText:gsub("%%", "")
 AssertEquals(1, percentages)
 
@@ -375,8 +371,6 @@ AssertEquals(3, currentDocument._textline)
 AssertEquals(currentDocument:getPositionForLine(3), currentDocument._textpos)
 runPositionalGoto(8, "100")
 AssertEquals(currentDocument._textbuffer:size(), currentDocument._textpos)
-runPositionalGoto(4, "1")
-AssertEquals(0, currentDocument._textpos)
 
 -- Corrupt metadata is rejected before it can construct indexed objects.
 local corruptPath = dir.."/corrupt-native.wp"

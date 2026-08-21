@@ -84,6 +84,5 @@ The default curly pairs are “/” and ‘/’. Transformation can be disabled 
 Spellchecking can highlight unknown words, use a system dictionary, use a
 per-set user dictionary, or combine them. A system dictionary is selected
 globally; bundled American/Canadian and British dictionaries are installed as
-resources. The status bar can estimate pages from a configurable words-per-page
-value (250 by default); this is deliberately separate from physical layout.
-
+resources. The `Pg:` status field uses the physical page layout configured for
+the document; it is independent from the paragraph/style position field.
