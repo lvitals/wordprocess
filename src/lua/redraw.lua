@@ -537,6 +537,14 @@ local function redrawtextbuffer()
 	SetColour(nil, Palette.Desktop)
 	ClearScreen()
 	local document = currentDocument
+	if document.viewmode == 3 then
+		local line = document:getLineAtPosition()
+		local marginwidth = #tostring(line or 1)
+		if document.margin ~= marginwidth then
+			document.margin = marginwidth
+			ResizeScreen()
+		end
+	end
 	if document._textbuffer:sourcechanged() then
 		redrawstatus()
 		DrawStatusLine("Source file changed on disk; close and import it again safely.")

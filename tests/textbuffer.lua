@@ -298,6 +298,18 @@ loadedNative.current:addLargeCharacterStyle(0, 5, wg.BOLD)
 AssertEquals(nativeText, loadedNative.current._textbuffer:slice(0,
 	loadedNative.current._textbuffer:size()))
 
+-- A metadata-only change keeps the mapped content offset and saves atomically
+-- through the clone/prefix path; a second unchanged save is an immediate no-op.
+documentSet = loadedNative
+currentDocument = loadedNative.current
+SetMarginMode(3)
+AssertEquals(false, currentDocument._textchanged)
+AssertEquals(true, Cmd.SaveCurrentDocument())
+AssertEquals(true, Cmd.SaveCurrentDocument())
+local metadataOnlyReload = assert(LoadFromFile(nativePath))
+AssertEquals(3, metadataOnlyReload.current.viewmode)
+loadedNative = metadataOnlyReload
+
 documentSet = loadedNative
 currentDocument = loadedNative.current
 currentDocument._textbuffer:insert(0, "edited ")

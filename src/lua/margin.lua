@@ -61,9 +61,8 @@ local paragraph_number_controller=
 
 			local nm
 			if currentDocument:usesTextBuffer() then
-				-- The exact total line count is intentionally not scanned at open.
-				-- Reserve enough room for a useful native line counter anyway.
-				nm = 10
+				local line = currentDocument:getLineAtPosition()
+				nm = #tostring(line or 1)
 			else
 				nm = int(math.log(math.max(#currentDocument, 1), 10)) + 1
 			end
@@ -135,7 +134,8 @@ function SetMarginMode(mode)
 		assert(controller.attach)(controller)
 	end
 
-	documentSet:touch()
+	-- Margin presentation changes metadata, not content or physical layout.
+	documentSet:touch(true)
 	ResizeScreen()
 end
 

@@ -216,24 +216,49 @@ local function UpdateDocumentIndexes(document)
 	PrepareMappedPageIndex(document)
 end
 
-local function BuildLargeWPPrefix()
-	UpdateDocumentIndexes(currentDocument)
+local function BuildLargeWPPrefix(filename)
+	local index = currentDocument:ensureDocumentIndex()
+	if currentDocument._textchanged or not index.lineCount or
+		not EnsureDocumentPageIndex(currentDocument) then
+		UpdateDocumentIndexes(currentDocument)
+	end
 	local metadata = SaveToHeaderlessString(documentSet)
-	local header = DOCUMENT_MAGIC.."\n"..
-		string.format("metadata-length: %020d\n", #metadata)..
-		string.format("metadata-crc32: %08x\n", MetadataChecksum(metadata))..
-		string.format("content-length: %020d\n", currentDocument._textbuffer:size())..
-		"\n"
+	local function makeheader(contents)
+		return DOCUMENT_MAGIC.."\n"..
+			string.format("metadata-length: %020d\n", #contents)..
+			string.format("metadata-crc32: %08x\n", MetadataChecksum(contents))..
+			string.format("content-length: %020d\n", currentDocument._textbuffer:size())..
+			"\n"
+	end
+	-- When only metadata changed, retain the existing content offset by padding
+	-- the headerless metadata with ignorable blank lines. This enables the
+	-- native save path to atomically reflink the old container and rewrite only
+	-- its small prefix instead of copying several GiB.
+	if not currentDocument._textchanged and filename == currentDocument._textsource then
+		local oldoffset = currentDocument._textbuffer:contentoffset()
+		local fixedheader = makeheader("")
+		local capacity = oldoffset - #fixedheader
+		if capacity >= #metadata then
+			metadata = metadata..string.rep("\n", capacity - #metadata)
+		end
+	end
+	local header = makeheader(metadata)
 	return header..metadata
 end
 
 local function SaveLargeWP(filename)
+	if not currentDocument._textchanged and not documentSet._changed and
+		filename == currentDocument._textsource and
+		not currentDocument._textbuffer:sourcechanged() then
+		NonmodalMessage("No changes to save.")
+		return true
+	end
 	local oldname = documentSet.name
 	documentSet.name = filename
 	-- Index rebuilding can scan billions of bytes. Display progress before that
 	-- work starts, not only immediately before the final streaming write.
 	ShowLargeTextSaveMessage(filename)
-	local prefix = BuildLargeWPPrefix()
+	local prefix = BuildLargeWPPrefix(filename)
 	local ok, e = currentDocument._textbuffer:save(filename, prefix)
 	if not ok then
 		documentSet.name = oldname

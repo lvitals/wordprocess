@@ -15,6 +15,8 @@
 #include <sys/mman.h>
 #ifdef __linux__
 #include <sys/sendfile.h>
+#include <sys/ioctl.h>
+#include <linux/fs.h>
 #endif
 #else
 #include <io.h>
@@ -292,6 +294,12 @@ static int buffer_piece_count_cb(lua_State* L)
     size_t count = 0;
     for (Piece* piece = buffer->pieces; piece; piece = piece->next) count++;
     lua_pushnumber(L, (lua_Number)count);
+    return 1;
+}
+
+static int buffer_content_offset_cb(lua_State* L)
+{
+    lua_pushnumber(L, (lua_Number)check_buffer(L, 1)->content_offset);
     return 1;
 }
 
@@ -1123,19 +1131,37 @@ static int buffer_save_cb(lua_State* L)
         lua_pushnil(L); lua_pushstring(L, strerror(errno)); return 2;
     }
     bool ok = true;
+    bool metadata_clone = false;
 #ifdef WIN32
     DWORD windows_error = ERROR_SUCCESS;
 #endif
-    size_t remaining = buffer->size;
+	size_t remaining = buffer->size;
 	if (inject_save_fault("temporary")) ok = false;
 #ifndef WIN32
-    if (prefix_length && !write_all(output,
+#ifdef __linux__
+    if (ok && prefix_length && !buffer->modified && buffer->source_fd >= 0 &&
+        buffer->source_path && strcmp(buffer->source_path, filename) == 0 &&
+        prefix_length == buffer->content_offset &&
+        ioctl(output, FICLONE, buffer->source_fd) == 0)
+    {
+        if (lseek(output, 0, SEEK_SET) < 0 ||
+            !write_all(output, (const unsigned char*)prefix, prefix_length))
+            ok = false;
+        else
+        {
+            metadata_clone = true;
+            remaining = 0;
+        }
+    }
+#endif
+    if (!metadata_clone && prefix_length && !write_all(output,
         (const unsigned char*)prefix, prefix_length)) ok = false;
 #else
     if (prefix_length && fwrite(prefix, 1, prefix_length, output) != prefix_length)
         ok = false;
 #endif
-    for (Piece* piece = buffer->pieces; piece && ok; piece = piece->next)
+    for (Piece* piece = metadata_clone ? NULL : buffer->pieces;
+        piece && ok; piece = piece->next)
     {
         size_t piece_length = piece->length < remaining ? piece->length : remaining;
 #ifndef WIN32
@@ -1571,6 +1597,7 @@ void textbuffer_init(void)
     static const luaL_Reg methods[] = {
         {"close", buffer_close_cb}, {"size", buffer_size_cb},
         {"piececount", buffer_piece_count_cb},
+		{"contentoffset", buffer_content_offset_cb},
         {"stats", buffer_stats_cb},
 		{"pageindex", buffer_page_index_cb},
 		{"pagefind", buffer_page_find_cb},
