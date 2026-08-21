@@ -91,6 +91,7 @@ Form.Run = function(dialogue)
 	local files = dialogue.widgets[3]
 	filename.draw = function() end
 	files.draw = function() end
+	AssertEquals("original.odt", filename.value)
 
 	files["j"](files, "j")
 	AssertEquals(2, files.cursor)
@@ -115,8 +116,13 @@ end
 BrowserForm("Test", "/tmp", "Filename:", {
 	{data="first.wp", key="first.wp", label="first.wp"},
 	{data="second.wp", key="second.wp", label="second.wp"},
-})
+}, "original.odt")
 Form.Run = original_form_run
+
+AssertEquals("/tmp/existing.odt",
+	ResolveBrowserFilename("/tmp/existing.odt"))
+AssertEquals(wg.getcwd().."/renamed.odt",
+	ResolveBrowserFilename("renamed.odt"))
 
 NavigationMode = false
 Cmd.ToggleNavigationMode()

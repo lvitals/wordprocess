@@ -1,6 +1,11 @@
 --!nonstrict
 loadfile("tests/testsuite.lua")()
 
+-- Keep the requested widths independent of the user's persisted first-line
+-- indentation preference.
+GlobalSettings.lookandfeel.firstlineindent = false
+UpdateDocumentStyles()
+
 local para = currentDocument[1]
 para[1] = "abcdefghijklmnopqrst"
 currentDocument:wrap(8)

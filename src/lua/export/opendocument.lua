@@ -162,18 +162,9 @@ end
 
 local function export_odt_with_ui(filename, title, extension)
 	if not filename then
-		filename = currentDocument.name
-		if filename then
-			if not filename:find("%..-$") then
-				filename = filename .. extension
-			else
-				filename = filename:gsub("%..-$", extension)
-			end
-		else
-			filename = "(unnamed)"
-		end
+		filename = GetDefaultExportFilename(extension)
 
-		local filename = FileBrowser(title, "Export as:", true,
+		filename = FileBrowser(title, "Export as:", true,
 			filename)
 		if not filename then
 			return false
@@ -394,8 +385,9 @@ local function export_odt_with_ui(filename, title, extension)
 	local layout = GetDocumentPageLayout(currentDocument)
 	-- These values are used as gsub replacement strings, where a literal
 	-- percent sign must be doubled.
-	local lineheight = tostring(layout.lineSpacing * 100).."%%"
-	local speciallineheight = tostring(layout.specialLineSpacing * 100).."%%"
+	local lineheight = string_format("%.6g%%%%", layout.lineSpacing * 100)
+	local speciallineheight = string_format("%.6g%%%%",
+		layout.specialLineSpacing * 100)
 	local pagestyles = string_format([[
 			<office:automatic-styles>
 				<style:page-layout style:name="WordProcessPage">
@@ -414,9 +406,6 @@ local function export_odt_with_ui(filename, title, extension)
 		layout.marginBottomCm, layout.marginLeftCm)
 	xml["styles.xml"] = xml["styles.xml"]:gsub(
 		"</office:document%-styles>", pagestyles.."</office:document-styles>")
-	xml["styles.xml"] = xml["styles.xml"]:gsub(
-		'<style:style style:name="P"',
-		'<style:style style:name="P" style:master-page-name="Standard"')
 	xml["styles.xml"] = xml["styles.xml"]:gsub(
 		'fo:margin%-top="1%.5mm"%s+fo:margin%-bottom="1%.5mm"/>',
 		'fo:margin-top="0mm" fo:margin-bottom="0mm" fo:line-height="'..

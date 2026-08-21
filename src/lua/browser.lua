@@ -29,6 +29,14 @@ local function compare_filenames(f1, f2)
 	end
 end
 
+function ResolveBrowserFilename(filename)
+	if filename:find("^[/\\]") or
+		((ARCH == "windows") and filename:match("^%a:[/\\]")) then
+		return filename
+	end
+	return GetCwd().."/"..filename
+end
+
 function FileBrowser(title, message, saving,
 		default)
 	local files = {}
@@ -82,7 +90,7 @@ function FileBrowser(title, message, saving,
 		}
 	end
 
-	local f = BrowserForm(title, GetCwd(), message, labels)
+	local f = BrowserForm(title, GetCwd(), message, labels, default)
 	if not f then
 		return nil
 	end
@@ -113,17 +121,13 @@ function FileBrowser(title, message, saving,
 		if (r == nil) then
 			return nil
 		elseif r then
-			return GetCwd().."/"..f
+			return ResolveBrowserFilename(f)
 		else
 			return FileBrowser(title, message, saving)
 		end
 	end
 
-	if not f:find("^[/\\]") then
-		return GetCwd().."/"..f
-	else
-		return f
-	end
+	return ResolveBrowserFilename(f)
 end
 
 function Autocomplete(filename, x1, x2, y)
@@ -185,7 +189,7 @@ function Autocomplete(filename, x1, x2, y)
 	return filename
 end
 
-function BrowserForm(title, topmessage, bottommessage, data)
+function BrowserForm(title, topmessage, bottommessage, data, default)
 	local dialogue
 
 	local browser = Form.Browser {
@@ -200,7 +204,7 @@ function BrowserForm(title, topmessage, bottommessage, data)
 	local textfield = Form.TextField {
 		x1 = GetStringWidth(bottommessage) + 3, y1 = -3,
 		x2 = -1, y2 = -2,
-		value = data[1].data,
+		value = default or data[1].data,
 		transient = true,
 
 		-- Only fired if changed _by the text field_.

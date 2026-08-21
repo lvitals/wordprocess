@@ -194,18 +194,23 @@ end
 -- Prompts the user to export a document, and then calls
 -- exportcb(writer, document) to actually do the work.
 
+function GetDefaultExportFilename(extension)
+	-- A saved document set has the real source path; the current document name
+	-- is commonly just the internal name "main". Prefer the source path so an
+	-- export beside foo.wp is proposed as foo.odt rather than main.odt.
+	local filename = documentSet.name or currentDocument.name
+	if not filename then
+		return "(unnamed)"
+	end
+	if filename:find("%..-$") then
+		return filename:gsub("%..-$", extension)
+	end
+	return filename .. extension
+end
+
 function ExportFileWithUI(filename, title, extension, callback)
 	if not filename then
-		filename = currentDocument.name
-		if filename then
-			if not filename:find("%..-$") then
-				filename = filename .. extension
-			else
-				filename = filename:gsub("%..-$", extension)
-			end
-		else
-			filename = "(unnamed)"
-		end
+		filename = GetDefaultExportFilename(extension)
 
 		filename = FileBrowser(title, "Export as:", true,
 			filename)

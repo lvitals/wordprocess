@@ -1,6 +1,12 @@
 --!nonstrict
 loadfile("tests/testsuite.lua")()
 
+documentSet.name = "/tmp/my-document.wp"
+AssertEquals("/tmp/my-document.odt", GetDefaultExportFilename(".odt"))
+documentSet.name = nil
+currentDocument.name = "main"
+AssertEquals("main.odt", GetDefaultExportFilename(".odt"))
+
 Cmd.InsertStringIntoParagraph("one two three")
 Cmd.SplitCurrentParagraph()
 
@@ -61,4 +67,3 @@ local expected = [[
 
 local output = Cmd.ExportToODTString()
 AssertEquals(expected, output)
-
