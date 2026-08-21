@@ -10,15 +10,16 @@ do
 	local function cb(event, token, terms)
 		local settings = documentSet.addons.pagecount or {}
 		if settings.enabled then
-			local words = currentDocument:usesTextBuffer() and
-				currentDocument:ensureDocumentIndex().wordCount or
-				currentDocument.wordcount
-			if not words then return end
-			local pages = math.floor(words / settings.wordsperpage)
+			local pages = currentDocument:getPageCount()
+			local page = currentDocument:getPageAtPosition()
+			local label = ScreenWidth and ScreenWidth < 100 and "Pg~" or "Page~"
 			terms[#terms+1] = {
-				priority=80,
-				value=string.format("%d %s", pages,
-					Pluralise(pages, "page", "pages"))
+				priority=95,
+				-- The tilde makes the existing words-per-page estimate explicit.
+				value=pages and string.format("%s %d/%d", label, page, pages) or
+					(label.." ?/?"),
+				shortvalue=pages and string.format("Pg~ %d/%d", page, pages) or
+					"Pg~ ?/?",
 			}
 		end
 	end

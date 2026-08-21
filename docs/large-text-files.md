@@ -82,8 +82,9 @@ exercises 64-bit offsets without allocating or writing 4 GiB of physical
 storage.
 
 Native saves also scan the piece sequence with constant auxiliary memory to
-refresh exact word and paragraph counts. Those cached values drive the status
-bar and approximate page count. Editing invalidates them immediately, so the
+refresh exact word and logical-line counts plus sparse newline checkpoints.
+Those cached values drive the status bar and estimated page count. Editing
+invalidates them immediately, so the
 interface shows an unknown count rather than stale data until the next native
 checkpoint rebuilds the index.
 
@@ -126,12 +127,22 @@ The loader continues to accept the historical `WordProcess dumpfile` and
 unified name. Older applications fail closed on the new versioned signature;
 an unsupported future version reports that a newer application is required.
 
-`Ctrl+G` immediately opens the same structural table of contents for every
-WordProcess document. It lists non-empty paragraphs styled as H1 through H4,
-with hierarchical numbering, and intentionally omits body text and blank
-paragraphs. There is no intermediate prompt or special syntax. Scalable
-storage reads only sparse paragraph-style spans and bounded title previews,
-without scanning or materialising the complete body. Clipboard-backed
+`Ctrl+G` opens the same combined Go To tool for every WordProcess document.
+Its primary list is the structural table of contents: non-empty paragraphs
+styled H1 through H4, hierarchical numbering, no body text or blank headings.
+Page, absolute line, and 0–100 percent fields provide positional navigation.
+Tab and Shift-Tab move focus; numeric fields do not treat H/J/K/L as browser
+movement. Scalable storage reads only sparse paragraph-style spans and bounded
+title previews (approximately 4 KiB), without scanning or materialising the
+complete body. Line lookup starts at the nearest sparse newline checkpoint and
+performs a bounded forward scan. Percentage lookup uses 64-bit byte positions
+and backs up to a UTF-8 boundary.
+
+The page model is deliberately an estimated logical model:
+`ceil(cached words / configured words per page)`. Both Go To and the status bar
+call the same document navigation API. Frequent status redraws use cached
+totals, sparse lookups, and arithmetic only; they never rebuild the index or
+scan the whole mapped file. Clipboard-backed
 scrapbook actions and the character-style status indicator also work with
 scalable storage.
 

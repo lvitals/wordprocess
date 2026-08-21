@@ -11,24 +11,30 @@ local string_format = string.format
 do
 	local function cb(event, token, terms)
 		if currentDocument:usesTextBuffer() then
-			local size = currentDocument._textbuffer:size()
 			local position = currentDocument._textpos or 0
-			local percent = size == 0 and 0 or math.floor(position * 100 / size)
-			local line = currentDocument._textline and
-				("L:"..tostring(currentDocument._textline)) or "L:~"
+			local percent = currentDocument:getPositionPercent(position)
+			local linenumber, exact = currentDocument:getLineAtPosition(position)
+			local line = linenumber and
+				("L:"..(exact and "" or "~")..tostring(linenumber)) or "L:~"
 			terms[#terms+1] = {
 				priority=100,
-				value=string_format("%s %d%% @%d", line, percent, position)
+				value=string_format("%s %d%% @%d", line, percent, position),
+				shortvalue=string_format("%s %d%%", line, percent),
 			}
 			return
 		end
+		local percent = currentDocument:getPositionPercent()
 		terms[#terms+1] =
 			{
 				priority=100,
-				value=string_format("%s: %d/%d",
+				-- Preserve the established style/paragraph field verbatim and
+				-- extend it with the shared authoritative percentage.
+				value=string_format("%s: %d/%d %d%%",
 					currentDocument[currentDocument.cp].style,
 					currentDocument.cp,
-					#currentDocument)
+					#currentDocument,
+					percent),
+				shortvalue=string_format("L:%d %d%%", currentDocument.cp, percent),
 			}
 	end
 

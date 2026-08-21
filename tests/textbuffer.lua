@@ -279,9 +279,9 @@ AssertNotNull(loadedNative)
 AssertEquals(true, loadedNative.current:usesTextBuffer())
 AssertEquals(true, loadedNative.current._nativeLarge)
 AssertEquals(nil, loadedNative.current.largeDocument)
-AssertEquals(3, loadedNative.current.documentIndex.paragraphCount)
-AssertEquals(4096, loadedNative.current.documentIndex.paragraphIndexStride)
-AssertEquals(0, loadedNative.current.documentIndex.paragraphOffsets[1])
+AssertEquals(3, loadedNative.current.documentIndex.lineCount)
+AssertEquals(4096, loadedNative.current.documentIndex.lineIndexStride)
+AssertEquals(0, loadedNative.current.documentIndex.lineOffsets[1])
 AssertEquals(4, loadedNative.current.documentIndex.wordCount)
 AssertNotNull(loadedNative.current.documentIndex.paragraphStyles)
 AssertNotNull(loadedNative.current.documentIndex.characterStyles)
@@ -314,18 +314,69 @@ AssertEquals("edited "..nativeText, reloadedNative.current._textbuffer:slice(0,
 -- documents. It reads only sparse heading spans and bounded title slices.
 documentSet = reloadedNative
 currentDocument = reloadedNative.current
+currentDocument:addLargeParagraphStyle(18, 29, "H2")
 currentDocument._textpos = currentDocument._textbuffer:size()
 local oldFormRun = Form.Run
 Form.Run = function(dialogue)
-	AssertEquals("Table of Contents", dialogue.title)
-	AssertEquals(1, #dialogue.widgets[2].data)
+	AssertEquals("Go To", dialogue.title)
+	AssertEquals(2, #dialogue.widgets[2].data)
 	AssertEquals("1. edited first line", dialogue.widgets[2].data[1].label)
+	AssertEquals("   1.1. second line", dialogue.widgets[2].data[2].label)
+	AssertEquals(2, dialogue.widgets[2].cursor)
 	dialogue.widgets[2].cursor = 1
 	return true
 end
 AssertEquals(true, Cmd.Goto())
 AssertEquals(0, currentDocument._textpos)
 Form.Run = oldFormRun
+
+-- Structural and positional navigation share the saved sparse index. Each
+-- line lookup scans forward from at most one 4096-line checkpoint.
+AssertEquals(3, currentDocument:getLineCount())
+AssertEquals(1, currentDocument:getLineAtPosition(0))
+AssertEquals(2, currentDocument:getLineAtPosition(18))
+AssertEquals(18, currentDocument:getPositionForLine(2))
+AssertEquals(nil, currentDocument:getPositionForLine(0))
+AssertEquals(nil, currentDocument:getPositionForLine(4))
+AssertEquals(0, currentDocument:getPositionForPercent(0))
+AssertEquals(currentDocument._textbuffer:size(),
+	currentDocument:getPositionForPercent(100))
+local middlePosition = assert(currentDocument:getPositionForPercent(50))
+local middleByte = currentDocument._textbuffer:slice(middlePosition, 1):byte()
+AssertEquals(true, not middleByte or middleByte < 0x80 or middleByte >= 0xc0)
+documentSet.addons.pagecount = {enabled=true, wordsperpage=2}
+AssertEquals(3, currentDocument:getPageCount())
+AssertEquals(1, currentDocument:getPageAtPosition(0))
+AssertEquals(3, currentDocument:getPageAtPosition(currentDocument._textbuffer:size()))
+AssertEquals(0, currentDocument:getPositionForPage(1))
+AssertEquals(nil, currentDocument:getPositionForPage(0))
+AssertEquals(nil, currentDocument:getPositionForPage(4))
+local navigationStatus = {}
+FireEvent("BuildStatusBar", navigationStatus)
+local navigationText = {}
+for _, term in ipairs(navigationStatus) do navigationText[#navigationText+1] = term.value end
+navigationText = table.concat(navigationText, " | ")
+AssertEquals(true, navigationText:find("Pg~ 1/3", 1, true) ~= nil or
+	navigationText:find("Page~ 1/3", 1, true) ~= nil)
+local _, percentages = navigationText:gsub("%%", "")
+AssertEquals(1, percentages)
+
+local function runPositionalGoto(focus, value)
+	Form.Run = function(dialogue)
+		dialogue.focus = focus
+		dialogue.widgets[focus].value = value
+		return true
+	end
+	AssertEquals(true, Cmd.Goto())
+	Form.Run = oldFormRun
+end
+runPositionalGoto(6, "3")
+AssertEquals(3, currentDocument._textline)
+AssertEquals(currentDocument:getPositionForLine(3), currentDocument._textpos)
+runPositionalGoto(8, "100")
+AssertEquals(currentDocument._textbuffer:size(), currentDocument._textpos)
+runPositionalGoto(4, "1")
+AssertEquals(0, currentDocument._textpos)
 
 -- Corrupt metadata is rejected before it can construct indexed objects.
 local corruptPath = dir.."/corrupt-native.wp"
@@ -349,6 +400,9 @@ AssertEquals(true, wg.truncatefile(sparsePath, sparseSize))
 local sparseDocument = assert(CreateTextBufferDocument(sparsePath))
 AssertEquals(sparseSize, sparseDocument._textbuffer:size())
 AssertEquals("\0", sparseDocument._textbuffer:slice(sparseSize - 1, 1))
+AssertEquals(math.floor(sparseSize / 2),
+	sparseDocument:getPositionForPercent(50))
+AssertEquals(sparseSize, sparseDocument:getPositionForPercent(100))
 sparseDocument._textbuffer:insert(sparseSize - 1, "x")
 AssertEquals("x\0", sparseDocument._textbuffer:slice(sparseSize - 1, 2))
 sparseDocument:adjustLargeStyleSpans(sparseSize - 1, 0, 1)

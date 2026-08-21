@@ -26,7 +26,7 @@ customise bindings, see [Keyboard shortcuts](keyboard-shortcuts.md).
 | Ctrl-Z / Ctrl-Y | Undo and redo |
 | Ctrl-F / Ctrl-K | Find and find next |
 | Ctrl-R | Replace, then find the next match |
-| Ctrl-G | Open the structural table of contents (H1–H4) |
+| Ctrl-G | Open Go To: H1–H4 contents, estimated page, line, or percentage |
 | Ctrl-I / Ctrl-U / Ctrl-B / Ctrl-N | Italic, underline, bold, or normal |
 | Ctrl-P | Choose a paragraph style |
 | Ctrl-L | Find the next misspelt word |
@@ -82,6 +82,17 @@ selection endpoint. A non-Shift movement collapses or clears selection state as
 appropriate. Typing, Space, Return, Tab, deletion, paste, and style changes
 replace selected content when their operation supports it.
 
+`Ctrl-G` keeps the hierarchical H1–H4 table of contents as its primary list.
+The heading at or immediately before the cursor is initially selected; blank
+headings and ordinary body paragraphs are omitted. Use Tab and Shift-Tab to
+move between that list and the numeric Page, Line, and Percentage fields. Page
+1 and Line 1 start at the beginning; percentages accept 0 through 100.
+
+Pages are estimated logical pages, calculated as
+`ceil(cached word count / configured words per page)`. Go To and the status bar
+use the same estimate and position conversion; they are not physical rendered
+pages.
+
 ## Display behaviour
 
 The editor can use the full viewport, an explicit maximum column width, or a
@@ -90,8 +101,10 @@ and font size. Long words are either moved intact or visually hyphenated.
 Scrolling can keep the cursor fixed while content moves or jump the viewport.
 
 The status bar combines available terms by priority: document name and modified
-state, cursor position, word count, approximate page count, character style,
-and optional debugging information. Narrow windows omit lower-priority terms.
+state, cursor position, word count, estimated current/total page (`Page~`),
+logical line, the single authoritative position percentage, character style,
+and optional debugging information. Existing fields keep their ordering and
+priority. The page label contracts to `Pg~` on narrower terminals.
 
 Both frontends accept mouse selection. Pressing starts a mark, dragging extends
 it, and a click without a drag clears it. The graphical frontend also receives

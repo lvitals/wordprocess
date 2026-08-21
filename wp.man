@@ -25,6 +25,11 @@ Run a Lua command and exit.
 .TP
 .BI \-\-convert " source destination"
 Convert between supported document formats.
+.SH NAVIGATION
+Ctrl-G opens Go To. It preserves the hierarchical H1-H4 table of contents and
+also accepts an estimated logical page, absolute line, or document percentage.
+The page estimate uses the configured words-per-page value and is shared with
+the status bar.
 .SH FILES
 .TP
 .B ~/.wordprocess/startup.lua

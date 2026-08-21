@@ -226,9 +226,38 @@ local function redrawstatus()
 		FireEvent("BuildStatusBar", ss)
 		table.sort(ss, function(x, y) return x.priority < y.priority end)
 
+		-- Keep the established term order and priorities. On constrained
+		-- terminals first use each addon's compact spelling, then omit the
+		-- lowest-priority optional terms until the right side cannot overwrite
+		-- the document identity on the left.
+		local leftwidth = GetStringWidth(table.concat(s, ""))
+		local available = math.max(0, ScreenWidth - math.min(leftwidth + 1,
+			math.max(16, math.floor(ScreenWidth / 3))))
+		local function termswidth()
+			local width = 0
+			for _, term in ipairs(ss) do
+				if not term.hidden then
+					if width > 0 then width = width + 3 end
+					width = width + GetStringWidth(term.displayvalue or term.value)
+				end
+			end
+			return width
+		end
+		if termswidth() > available then
+			for _, term in ipairs(ss) do term.displayvalue = term.shortvalue or term.value end
+		end
+		if termswidth() > available then
+			for _, term in ipairs(ss) do
+				if not term.mandatory then
+					term.hidden = true
+					if termswidth() <= available then break end
+				end
+			end
+		end
+
 		local s = {" "}
 		for _, v in ipairs(ss) do
-			s[#s+1] = v.value
+			if not v.hidden then s[#s+1] = v.displayvalue or v.value end
 		end
 		local ss = table.concat(s, " │ ")
 		if (string.sub(ss, #ss) == " ") then

@@ -209,12 +209,12 @@ local function UpdateDocumentIndexes(document)
 	end
 	local previous = document:ensureDocumentIndex()
 	document.documentIndex = {
-		version = 1,
+		version = 2,
 		contentLength = buffer:size(),
-		paragraphCount = paragraph_count,
+		lineCount = paragraph_count,
 		wordCount = word_count,
-		paragraphIndexStride = stride,
-		paragraphOffsets = offsets,
+		lineIndexStride = stride,
+		lineOffsets = offsets,
 		paragraphStyles = previous.paragraphStyles or {count=0},
 		characterStyles = previous.characterStyles or {count=0},
 	}

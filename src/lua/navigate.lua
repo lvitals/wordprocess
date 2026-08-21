@@ -45,7 +45,7 @@ end
 
 AddEventListener("BuildStatusBar", function(event, token, terms)
 	if NavigationMode then
-		terms[#terms+1] = {priority=1, value="NAVIGATION"}
+		terms[#terms+1] = {priority=1, value="NAVIGATION", mandatory=true}
 	end
 end)
 

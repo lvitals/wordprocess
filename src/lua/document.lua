@@ -171,7 +171,149 @@ function Document.ensureDocumentIndex(self)
 	self.largeDocument = nil
 	self.documentIndex.characterStyles = self.documentIndex.characterStyles or {count=0}
 	self.documentIndex.paragraphStyles = self.documentIndex.paragraphStyles or {count=0}
+	-- Version 1 called logical text lines "paragraphs". They share newline
+	-- checkpoints, so migrate rather than retaining duplicate indexes.
+	self.documentIndex.lineCount = self.documentIndex.lineCount or
+		self.documentIndex.paragraphCount
+	self.documentIndex.lineIndexStride = self.documentIndex.lineIndexStride or
+		self.documentIndex.paragraphIndexStride
+	self.documentIndex.lineOffsets = self.documentIndex.lineOffsets or
+		self.documentIndex.paragraphOffsets
+	self.documentIndex.paragraphCount = nil
+	self.documentIndex.paragraphIndexStride = nil
+	self.documentIndex.paragraphOffsets = nil
 	return self.documentIndex
+end
+
+function Document.getLineCount(self)
+	if not self:usesTextBuffer() then return #self end
+	return self:ensureDocumentIndex().lineCount
+end
+
+function Document.getLineAtPosition(self, position)
+	if not self:usesTextBuffer() then
+		return math.max(1, math.min(position or self.cp, #self)), true
+	end
+	position = math.max(0, math.min(position or self._textpos,
+		self._textbuffer:size()))
+	if position == self._textpos and self._textline then return self._textline, true end
+	local index = self:ensureDocumentIndex()
+	local offsets = index.lineOffsets
+	local stride = index.lineIndexStride
+	if not index.lineCount or not offsets or not stride then return nil, false end
+	local low, high, checkpoint = 1, #offsets, 1
+	while low <= high do
+		local middle = math.floor((low + high) / 2)
+		if offsets[middle] <= position then checkpoint, low = middle, middle + 1
+		else high = middle - 1 end
+	end
+	local line = (checkpoint - 1) * stride + 1
+	local scan = offsets[checkpoint]
+	while scan < position do
+		local newline = self._textbuffer:find(scan, 10)
+		if not newline or newline >= position then break end
+		scan, line = newline + 1, line + 1
+	end
+	return math.min(line, index.lineCount), true
+end
+
+function Document.getPositionForLine(self, line)
+	if type(line) ~= "number" or line ~= math.floor(line) or line < 1 then
+		return nil, "Line must be a positive whole number."
+	end
+	if not self:usesTextBuffer() then
+		if line > #self then return nil, "Line is beyond the end of the document." end
+		return line
+	end
+	local index = self:ensureDocumentIndex()
+	if not index.lineCount or not index.lineOffsets or not index.lineIndexStride then
+		return nil, "Exact line navigation is unavailable until the document index is refreshed."
+	end
+	if line > index.lineCount then return nil, "Line is beyond the end of the document." end
+	local checkpoint = math.floor((line - 1) / index.lineIndexStride) + 1
+	local position = index.lineOffsets[checkpoint]
+	local current = (checkpoint - 1) * index.lineIndexStride + 1
+	while current < line do
+		local newline = self._textbuffer:find(position, 10)
+		if not newline then return nil, "Line is beyond the end of the document." end
+		position, current = newline + 1, current + 1
+	end
+	return position
+end
+
+function Document.getPositionPercent(self, position)
+	if self:usesTextBuffer() then
+		local size = self._textbuffer:size()
+		position = math.max(0, math.min(position or self._textpos, size))
+		return size == 0 and 0 or math.floor(position * 100 / size)
+	end
+	if #self <= 1 then return 0 end
+	local paragraph = math.max(1, math.min(position or self.cp, #self))
+	return math.floor((paragraph - 1) * 100 / (#self - 1))
+end
+
+function Document.getPositionForPercent(self, percent)
+	if type(percent) ~= "number" or percent < 0 or percent > 100 then
+		return nil, "Percentage must be between 0 and 100."
+	end
+	if not self:usesTextBuffer() then
+		if #self == 0 then return 1 end
+		return math.floor((#self - 1) * percent / 100) + 1
+	end
+	local size = self._textbuffer:size()
+	local position = math.floor(size * percent / 100)
+	if position >= size then return size end
+	while position > 0 do
+		local byte = self._textbuffer:slice(position, 1):byte()
+		if byte < 0x80 or byte >= 0xc0 then break end
+		position = position - 1
+	end
+	-- Prefer a nearby logical-line boundary without turning a long line into
+	-- an unbounded reverse scan.
+	local nearby = self._textbuffer:rfind(math.max(0, position - 65536), 10, position)
+	if nearby then position = nearby + 1 end
+	return position
+end
+
+function Document.getWordsPerPage(self)
+	local settings = documentSet and documentSet.addons and documentSet.addons.pagecount or {}
+	local words = tonumber(settings.wordsperpage) or 250
+	return math.max(1, words)
+end
+
+function Document.getPageCount(self)
+	local words = self:usesTextBuffer() and self:ensureDocumentIndex().wordCount or
+		self.wordcount
+	if words == nil then return nil end
+	return math.max(1, math.ceil(words / self:getWordsPerPage()))
+end
+
+function Document.getPageAtPosition(self, position)
+	local pages = self:getPageCount()
+	if not pages then return nil end
+	return math.min(pages, math.floor(self:getPositionPercent(position) * pages / 100) + 1)
+end
+
+function Document.getPositionForPage(self, page)
+	if type(page) ~= "number" or page ~= math.floor(page) or page < 1 then
+		return nil, "Page must be a positive whole number."
+	end
+	local pages = self:getPageCount()
+	if not pages then return nil, "Estimated page count is currently unavailable." end
+	if page > pages then return nil, "Page is beyond the end of the document." end
+	return self:getPositionForPercent((page - 1) * 100 / pages)
+end
+
+function Document.gotoNavigationPosition(self, position, line)
+	if self:usesTextBuffer() then
+		self._textpos, self._texttop = position, position
+		self._textline, self._texttopline = line, line
+		Cmd.UnsetMark()
+	else
+		self.cp, self.cw, self.co = position, 1, 1
+	end
+	QueueRedraw()
+	return true
 end
 
 local function adjust_spans(spans, position, removed, added)
@@ -197,8 +339,11 @@ end
 function Document.adjustLargeStyleSpans(self, position, removed, added)
 	local metadata = self:ensureDocumentIndex()
 	metadata.wordCount = nil
-	metadata.paragraphCount = nil
-	metadata.paragraphOffsets = {0}
+	metadata.lineCount = nil
+	metadata.lineOffsets = nil
+	-- An edit may add or remove newlines. Unknown is preferable to retaining a
+	-- stale absolute line until the next explicit index checkpoint.
+	self._textline, self._texttopline = nil, nil
 	metadata.characterStyles = adjust_spans(metadata.characterStyles,
 		position, removed, added)
 	metadata.paragraphStyles = adjust_spans(metadata.paragraphStyles,
