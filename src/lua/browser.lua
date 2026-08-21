@@ -189,7 +189,7 @@ function BrowserForm(title, topmessage, bottommessage, data)
 	local dialogue
 
 	local browser = Form.Browser {
-		focusable = false,
+		focusable = true,
 		type = Form.Browser,
 		x1 = 1, y1 = 2,
 		x2 = -1, y2 = -5,
@@ -219,8 +219,15 @@ function BrowserForm(title, topmessage, bottommessage, data)
 		end,
 	}
 
+	local browser_actions = {
+		KEY_UP = Form.Browser["KEY_UP"],
+		KEY_DOWN = Form.Browser["KEY_DOWN"],
+		KEY_PGUP = Form.Browser["KEY_PGUP"],
+		KEY_PGDN = Form.Browser["KEY_PGDN"],
+	}
+
 	local function navigate(self, key)
-		local action = browser[key](browser)
+		local action = browser_actions[key](browser, key)
 		textfield.value = data[browser.cursor].data
 		textfield.cursor = textfield.value:len() + 1
 		textfield.offset = 1
@@ -229,27 +236,46 @@ function BrowserForm(title, topmessage, bottommessage, data)
 		return action
 	end
 
-	local function autocomplete(self)
-		textfield.value = Autocomplete(textfield.value,
-			textfield.realx1-1, textfield.realx2-1, textfield.realy1)
-		textfield.cursor = textfield.value:len() + 1
-		textfield.offset = 1
-		textfield.transient = false
-		textfield:draw()
-		dialogue.transient = true
-		return "nop"
-	end
-
 	local function go_to_parent(self)
 		textfield.value = ".."
 		return "confirm"
 	end
 
+	local function select_current(self)
+		textfield.value = data[browser.cursor].data
+		return "confirm"
+	end
+
+	local function toggle_focus(form)
+		if form.focus == 2 then
+			form.focus = 3
+		else
+			form.focus = 2
+			textfield.cursor = textfield.cursor or (textfield.value:len() + 1)
+		end
+		return "redraw"
+	end
+
+	browser["KEY_UP"] = navigate
+	browser["KEY_DOWN"] = navigate
+	browser["KEY_PGUP"] = navigate
+	browser["KEY_PGDN"] = navigate
+	browser["j"] = function(self) return navigate(self, "KEY_DOWN") end
+	browser["J"] = browser["j"]
+	browser["k"] = function(self) return navigate(self, "KEY_UP") end
+	browser["K"] = browser["k"]
+	browser["h"] = go_to_parent
+	browser["H"] = go_to_parent
+	browser["KEY_LEFT"] = go_to_parent
+	browser["l"] = select_current
+	browser["L"] = select_current
+	browser["KEY_RIGHT"] = select_current
+
 	local helptext
 	if (ARCH == "windows") then
-		helptext = "enter an path or drive letter ('c:') to go there; TAB completes"
+		helptext = "TAB edits the path; H/J/K/L or arrows navigate files"
 	else
-		helptext = "enter an path to go there; TAB completes"
+		helptext = "TAB edits the path; H/J/K/L or arrows navigate files"
 	end
 
 	dialogue =
@@ -258,19 +284,15 @@ function BrowserForm(title, topmessage, bottommessage, data)
 		width = "large",
 		height = "large",
 		stretchy = false,
+		focus = 3,
 
 		actions = {
 			["KEY_^P"] = go_to_parent,
 			["KEY_RETURN"] = "confirm",
 			["KEY_ENTER"] = "confirm",
 
-			["KEY_UP"] = navigate,
-			["KEY_DOWN"] = navigate,
-			["KEY_PGDN"] = navigate,
-			["KEY_PGUP"] = navigate,
-
-			["KEY_TAB"] = autocomplete,
-			["KEY_^I"] = autocomplete,
+			["KEY_TAB"] = toggle_focus,
+			["KEY_^I"] = toggle_focus,
 		},
 
 		widgets = {

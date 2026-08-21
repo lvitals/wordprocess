@@ -84,6 +84,40 @@ local textual = Form.TextField {
 textual["h"](textual, "h")
 AssertEquals("ahb", textual.value)
 
+local original_form_run = Form.Run
+Form.Run = function(dialogue)
+	AssertEquals(3, dialogue.focus)
+	local filename = dialogue.widgets[2]
+	local files = dialogue.widgets[3]
+	filename.draw = function() end
+	files.draw = function() end
+
+	files["j"](files, "j")
+	AssertEquals(2, files.cursor)
+	AssertEquals("second.wp", filename.value)
+	files["KEY_UP"](files, "KEY_UP")
+	AssertEquals(1, files.cursor)
+	AssertEquals("first.wp", filename.value)
+	files["KEY_DOWN"](files, "KEY_DOWN")
+	AssertEquals(2, files.cursor)
+	AssertEquals("second.wp", filename.value)
+	AssertEquals("confirm", files["KEY_RIGHT"](files, "KEY_RIGHT"))
+	AssertEquals("redraw", dialogue.actions["KEY_TAB"](dialogue, "KEY_TAB"))
+	AssertEquals(2, dialogue.focus)
+
+	filename.cursor = filename.value:len() + 1
+	filename["h"](filename, "h")
+	AssertEquals("h", filename.value)
+	AssertEquals("redraw", dialogue.actions["KEY_TAB"](dialogue, "KEY_TAB"))
+	AssertEquals(3, dialogue.focus)
+	return false
+end
+BrowserForm("Test", "/tmp", "Filename:", {
+	{data="first.wp", key="first.wp", label="first.wp"},
+	{data="second.wp", key="second.wp", label="second.wp"},
+})
+Form.Run = original_form_run
+
 NavigationMode = false
 Cmd.ToggleNavigationMode()
 AssertEquals(true, NavigationMode)

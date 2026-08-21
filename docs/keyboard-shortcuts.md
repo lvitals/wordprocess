@@ -13,6 +13,11 @@ selected value. In lists, `H`/`L` move by page. Text fields keep these letters
 available for normal typing. In numeric fields, `J`/`K` change focus and
 `H`/`L` move the text cursor, alongside the arrow keys.
 
+File selectors start with the file list focused. Use `J`/`K` or up/down to
+select a file, `H` or left to open the parent directory, and `L`, right, or
+Enter to open the selection. `Tab` alternates between the list and the filename
+field; while that field is focused, letters edit the filename normally.
+
 The names below use `Ctrl`, `Alt`, and `Shift`. A slash separates alternatives;
 `Shift` combined with a movement extends the selection.
 
