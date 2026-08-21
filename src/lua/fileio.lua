@@ -160,15 +160,10 @@ function SaveDocumentSetRaw(filename)
 	return SaveToFile(filename, documentSet)
 end
 
--- Mapped documents are selected only for very large plain-text files. Show a
--- synchronous centred notice only when save() will really stream an output
--- file; an unchanged save back to its source is a constant-time no-op.
+-- Mapped saves rebuild indexes and stream output even when there are no text
+-- edits, so every real save operation needs visible progress.
 function ShowLargeTextSaveMessage(filename)
 	if not currentDocument:usesTextBuffer() then return false end
-	if not currentDocument._textchanged and
-			filename == currentDocument._textsource then
-		return false
-	end
 	ImmediateMessage("Saving...")
 	return true
 end
@@ -218,6 +213,7 @@ local function UpdateDocumentIndexes(document)
 		paragraphStyles = previous.paragraphStyles or {count=0},
 		characterStyles = previous.characterStyles or {count=0},
 	}
+	PrepareMappedPageIndex(document)
 end
 
 local function BuildLargeWPPrefix()
@@ -815,6 +811,10 @@ local function LoadLargeWPFromFile(filename)
 		end
 	end
 	mapped:ensureDocumentIndex()
+	if not EnsureDocumentPageIndex(mapped) then
+		ImmediateMessage("Loading document: paginating...")
+		PrepareMappedPageIndex(mapped)
+	end
 	mapped._nativeLarge = true
 	local index = loaded:_findDocument(placeholder.name)
 	loaded.documents[index] = mapped
@@ -932,7 +932,10 @@ function Cmd.LoadDocumentSet(filename)
 		documentSet.menu = CreateMenuTree()
 	end
 	FireEvent("RegisterAddons")
-	documentSet:touch()
+	-- Registering missing addon defaults marks the set for compatibility, but
+	-- does not alter document content or physical layout. Keep the page index
+	-- that was loaded or rebuilt moments ago.
+	documentSet:touch(true)
 
 	ResizeScreen()
 	FireEvent("DocumentLoaded")

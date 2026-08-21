@@ -76,6 +76,31 @@ local function layoutsignature(document)
 		l.longQuoteIndentCm}, ":")
 end
 
+local function mappedmetrics(document)
+	local layout = GetDocumentPageLayout(document)
+	local columns = GetDocumentTextWidthColumns(document)
+	local usableheight = (layout.pageHeightCm - layout.marginTopCm -
+		layout.marginBottomCm) * CM_TO_PT
+	local rows = math.max(1, math.floor(usableheight /
+		(layout.fontSizePt * layout.lineSpacing)))
+	return columns, rows
+end
+
+function PrepareMappedPageIndex(document)
+	if not document or not document:usesTextBuffer() then return nil end
+	local columns, rows = mappedmetrics(document)
+	local stride = 256
+	local offsets, pagecount = document._textbuffer:pageindex(columns, rows, stride)
+	local index = {
+		signature=layoutsignature(document), pageCount=pagecount,
+		pageIndexStride=stride, pageOffsets=offsets,
+		columns=columns, rows=rows,
+	}
+	document:ensureDocumentIndex().pageLayoutIndex = index
+	document._pageIndex = index
+	return index
+end
+
 local function stylemetrics(document, style)
 	local layout = GetDocumentPageLayout(document)
 	local special = SPECIAL_STYLES[style]
@@ -130,7 +155,12 @@ function EnsureDocumentPageIndex(document)
 	end
 	if document:usesTextBuffer() then
 		local saved = document:ensureDocumentIndex().pageLayoutIndex
-		if saved and saved.signature == signature then return saved end
+		if saved and saved.signature == signature and saved.pageCount and
+			saved.pageIndexStride and saved.columns and saved.rows and
+			type(saved.pageOffsets) == "table" and #saved.pageOffsets > 0 then
+			document._pageIndex = saved
+			return saved
+		end
 		-- Native mapped documents are never synchronously repaginated by a
 		-- status redraw. Use a valid persisted bounded page index when present.
 		return nil
@@ -142,14 +172,17 @@ end
 function GetDocumentPageAtPosition(document, index, position)
 	if document:usesTextBuffer() then
 		local cursor = position or document._textpos
-		local starts = index.starts or index.pageOffsets
-		local page = 1
-		for i, start in ipairs(starts) do
-			local offset = type(start) == "table" and start.offset or start
-			if offset > cursor then break end
-			page = i
+		local offsets, low, high, checkpoint = index.pageOffsets, 1,
+			#index.pageOffsets, 1
+		while low <= high do
+			local middle = math.floor((low + high) / 2)
+			if offsets[middle] <= cursor then checkpoint, low = middle, middle + 1
+			else high = middle - 1 end
 		end
-		return page
+		local page = (checkpoint - 1) * index.pageIndexStride + 1
+		local foundpage = document._textbuffer:pagefind(index.columns, index.rows,
+			offsets[checkpoint], page, cursor)
+		return foundpage
 	end
 	local p, w, o = document.cp, document.cw, document.co
 	if type(position) == "table" then p, w, o = position.p, position.w, position.o end
@@ -175,10 +208,14 @@ function GetDocumentPageAtPosition(document, index, position)
 end
 
 function GetDocumentPositionForPage(document, index, page)
-	local start = assert((index.starts or index.pageOffsets)[page])
 	if document:usesTextBuffer() then
-		return type(start) == "table" and start.offset or start
+		local checkpoint = math.floor((page - 1) / index.pageIndexStride) + 1
+		local checkpointpage = (checkpoint - 1) * index.pageIndexStride + 1
+		local _, offset = document._textbuffer:pagefind(index.columns, index.rows,
+			index.pageOffsets[checkpoint], checkpointpage, nil, page)
+		return offset
 	end
+	local start = assert(index.starts[page])
 	return {p=start.p, w=start.w, o=start.o}
 end
 
@@ -259,6 +296,10 @@ function Cmd.ConfigurePageLayout()
 			for key, value in pairs(parsed) do layout[key] = value end
 			layout.profile = selected
 			documentSet:touch()
+			if currentDocument:usesTextBuffer() then
+				ImmediateMessage("Paginating document...")
+				PrepareMappedPageIndex(currentDocument)
+			end
 			ResizeScreen()
 			QueueRedraw()
 			return true

@@ -41,10 +41,15 @@ function CreateDocumentSet()
 	return (setmetatable(ds, DocumentSet))
 end
 
-DocumentSet.touch = function(self)
+DocumentSet.touch = function(self, preservePageIndex)
 	self._changed = true
 	self._justchanged = true
-	if currentDocument then currentDocument._pageIndex = nil end
+	if currentDocument and not preservePageIndex then
+		currentDocument._pageIndex = nil
+		if currentDocument.documentIndex then
+			currentDocument.documentIndex.pageLayoutIndex = nil
+		end
+	end
 end
 
 DocumentSet.clean = function(self)

@@ -317,6 +317,131 @@ static int buffer_stats_cb(lua_State* L)
     return 2;
 }
 
+typedef struct
+{
+    size_t columns, rows, column, row, page, stride;
+    size_t next_checkpoint;
+    lua_State* L;
+    int offsets_table;
+} PageLayoutScan;
+
+static void page_layout_new_visual_line(PageLayoutScan* scan, size_t offset)
+{
+    if (++scan->row < scan->rows)
+        return;
+    scan->row = 0;
+    scan->page++;
+    if (scan->offsets_table && scan->page == scan->next_checkpoint)
+    {
+        lua_pushnumber(scan->L, (lua_Number)offset);
+        lua_rawseti(scan->L, scan->offsets_table,
+            (lua_Integer)((scan->page - 1) / scan->stride + 1));
+        scan->next_checkpoint += scan->stride;
+    }
+}
+
+/* Physical-page checkpoints for mapped content. The terminal page model uses
+ * the same 0.5-em column convention as GetDocumentTextWidthColumns. UTF-8
+ * continuation bytes never create columns or boundaries; wide Unicode is
+ * conservatively one column here and is corrected by bounded local layout
+ * when a page is opened. */
+static int buffer_page_index_cb(lua_State* L)
+{
+    TextBuffer* buffer = check_buffer(L, 1);
+    PageLayoutScan scan = {
+        .columns = (size_t)luaL_checknumber(L, 2),
+        .rows = (size_t)luaL_checknumber(L, 3),
+        .stride = (size_t)luaL_optnumber(L, 4, 256),
+        .page = 1, .L = L,
+    };
+    luaL_argcheck(L, scan.columns > 0 && scan.rows > 0 && scan.stride > 0,
+        2, "invalid physical page dimensions");
+    lua_newtable(L);
+    scan.offsets_table = lua_gettop(L);
+    lua_pushnumber(L, 0);
+    lua_rawseti(L, scan.offsets_table, 1);
+    scan.next_checkpoint = scan.stride + 1;
+    size_t offset = 0;
+    for (Piece* piece = buffer->pieces; piece; piece = piece->next)
+    {
+        for (size_t i = 0; i < piece->length; i++, offset++)
+        {
+            unsigned char c = piece->data[i];
+            if (c == '\n')
+            {
+                scan.column = 0;
+                page_layout_new_visual_line(&scan, offset + 1);
+            }
+            else if (c >= 0x20 && c != 0x7f && (c < 0x80 || c >= 0xc0))
+            {
+                if (scan.column >= scan.columns)
+                {
+                    scan.column = 0;
+                    page_layout_new_visual_line(&scan, offset);
+                }
+                scan.column++;
+            }
+        }
+    }
+    lua_pushnumber(L, (lua_Number)scan.page);
+    return 2; /* offsets, page count */
+}
+
+static int buffer_page_find_cb(lua_State* L)
+{
+    TextBuffer* buffer = check_buffer(L, 1);
+    size_t columns = (size_t)luaL_checknumber(L, 2);
+    size_t rows = (size_t)luaL_checknumber(L, 3);
+    size_t start = check_offset(L, 4, buffer->size);
+    size_t page = (size_t)luaL_checknumber(L, 5);
+    lua_Number requested_offset = luaL_optnumber(L, 6, -1);
+    size_t target_page = (size_t)luaL_optnumber(L, 7, 0);
+    PageLayoutScan scan = {.columns=columns, .rows=rows, .page=page};
+    if (target_page && target_page <= page)
+    {
+        lua_pushnumber(L, (lua_Number)page);
+        lua_pushnumber(L, (lua_Number)start);
+        return 2;
+    }
+    size_t inner, offset = start;
+    Piece* piece = locate(buffer, start, NULL, &inner);
+    while (piece)
+    {
+        for (size_t i = inner; i < piece->length; i++, offset++)
+        {
+            if (requested_offset >= 0 && offset >= (size_t)requested_offset)
+                goto done;
+            unsigned char c = piece->data[i];
+            size_t oldpage = scan.page;
+            if (c == '\n')
+            {
+                scan.column = 0;
+                page_layout_new_visual_line(&scan, offset + 1);
+            }
+            else if (c >= 0x20 && c != 0x7f && (c < 0x80 || c >= 0xc0))
+            {
+                if (scan.column >= scan.columns)
+                {
+                    scan.column = 0;
+                    page_layout_new_visual_line(&scan, offset);
+                }
+                scan.column++;
+            }
+            if (target_page && scan.page >= target_page && scan.page != oldpage)
+            {
+                offset += (c == '\n');
+                goto done;
+            }
+        }
+        inner = 0;
+        piece = piece->next;
+    }
+done:
+    lua_pushnumber(L, (lua_Number)scan.page);
+    lua_pushnumber(L, (lua_Number)offset);
+    return 2;
+}
+
 static int buffer_slice_cb(lua_State* L)
 {
     TextBuffer* buffer = check_buffer(L, 1);
@@ -1447,6 +1572,8 @@ void textbuffer_init(void)
         {"close", buffer_close_cb}, {"size", buffer_size_cb},
         {"piececount", buffer_piece_count_cb},
         {"stats", buffer_stats_cb},
+		{"pageindex", buffer_page_index_cb},
+		{"pagefind", buffer_page_find_cb},
         {"slice", buffer_slice_cb}, {"find", buffer_find_cb},
         {"findstring", buffer_findstring_cb},
         {"rfind", buffer_rfind_cb},

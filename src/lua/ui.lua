@@ -73,6 +73,15 @@ function DrawTitledBox(x, y, w, h,
 end
 
 function ImmediateMessage(text)
+	-- Progress messages replace the current screen contents before drawing.
+	-- This prevents a later stage (for example pagination after loading) from
+	-- being painted as another box on top of a file-browser or prior stage.
+	if not _drawingImmediateMessage and type(RedrawScreen) == "function" and
+		ScreenWidth > 0 and ScreenHeight > 0 then
+		_drawingImmediateMessage = true
+		RedrawScreen()
+		_drawingImmediateMessage = false
+	end
 	local w = GetStringWidth(text)
 	local x = int((ScreenWidth - w) / 2)
 	local y = int(ScreenHeight / 2)
