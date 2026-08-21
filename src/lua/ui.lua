@@ -82,12 +82,18 @@ function ImmediateMessage(text)
 		RedrawScreen()
 		_drawingImmediateMessage = false
 	end
-	local w = GetStringWidth(text)
+	-- Every synchronous operation uses one visual component. Its geometry and
+	-- colours depend only on the current screen, never on message length or on
+	-- whichever form happened to draw immediately before it.
+	local w = math.min(44, ScreenWidth - 4)
+	w = math.max(1, w)
 	local x = int((ScreenWidth - w) / 2)
-	local y = int(ScreenHeight / 2)
-
-	DrawBox(x-2, y-1, w+2, 1)
-	Write(x, y, text)
+	local y = int(ScreenHeight / 2) - 1
+	SetColour(Palette.ControlFG, Palette.ControlBG)
+	SetNormal()
+	DrawBox(x-1, y, w, 1)
+	CentreInField(x, y+1, w, text)
+	SetNormal()
 	wg.sync()
 end
 
