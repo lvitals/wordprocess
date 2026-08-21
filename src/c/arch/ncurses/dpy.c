@@ -514,6 +514,10 @@ const char* dpy_getkeyname(uni_t k)
             return "KEY_PGUP";
         case KEY_STAB:
             return "KEY_STAB";
+#ifdef KEY_BTAB
+        case KEY_BTAB:
+            return "KEY_STAB";
+#endif
         case KEY_CTAB:
             return "KEY_^TAB";
         case KEY_CATAB:

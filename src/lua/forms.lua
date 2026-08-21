@@ -610,6 +610,9 @@ standard_actions["j"] = vim_focus
 standard_actions["J"] = vim_focus
 standard_actions["k"] = vim_focus
 standard_actions["K"] = vim_focus
+standard_actions["KEY_TAB"] = standard_actions["KEY_DOWN"]
+standard_actions["KEY_^I"] = standard_actions["KEY_DOWN"]
+standard_actions["KEY_STAB"] = standard_actions["KEY_UP"]
 Form.Browser = Browser
 
 local function resolvesize(size, bound)

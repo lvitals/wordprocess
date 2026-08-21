@@ -10,8 +10,9 @@ the arrow keys.
 
 In configuration forms, `J`/`K` move between controls and `H`/`L` change the
 selected value. In lists, `H`/`L` move by page. Text fields keep these letters
-available for normal typing. In numeric fields, `J`/`K` change focus and
-`H`/`L` move the text cursor, alongside the arrow keys.
+available for normal typing; use `Tab` and `Shift-Tab` to move to the next or
+previous control. In numeric fields, `J`/`K` change focus and `H`/`L` move the
+text cursor, alongside the arrow keys.
 
 File selectors start with the file list focused. Use `J`/`K` or up/down to
 select a file, `H` or left to open the parent directory, and `L`, right, or
