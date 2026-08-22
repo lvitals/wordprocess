@@ -71,6 +71,24 @@ AssertEquals("a", narrow[2]:sub(
 AssertEquals(true, narrowwrap.lines[1].trailingfragment.hyphen)
 AssertEquals(2, narrowwrap.lines[2].fragment.start)
 
+-- A word and its adjacent sentence punctuation form one wrapping unit. If
+-- they fit on a fresh line, never hyphenate the word or orphan the punctuation.
+for _, punctuation in ipairs({",", ".", ";", ":", "!", "?"}) do
+	local punctuated = CreateParagraph("P", {"hello", "closed"..punctuation})
+	local punctuatedWrap = punctuated:wrap(8)
+	AssertEquals(2, #punctuatedWrap.lines)
+	AssertTableEquals({1}, punctuatedWrap.lines[1])
+	AssertTableEquals({2}, punctuatedWrap.lines[2])
+	AssertEquals(nil, punctuatedWrap.lines[1].trailingfragment)
+	AssertEquals(nil, punctuatedWrap.lines[2].fragment)
+end
+
+local exactPunctuation = CreateParagraph("P", {"a", "closed,"})
+local exactPunctuationWrap = exactPunctuation:wrap(9)
+AssertEquals(1, #exactPunctuationWrap.lines)
+AssertTableEquals({1, 2}, exactPunctuationWrap.lines[1])
+AssertEquals(nil, exactPunctuationWrap.lines[1].trailingfragment)
+
 -- Wrapping is visual only: the stored/exported text remains unchanged.
 AssertEquals("hello abcdef", balanced:asString())
 

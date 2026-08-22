@@ -1,6 +1,40 @@
 --!nonstrict
 loadfile("tests/testsuite.lua")()
 
+-- Meson's dictionary_path remains the default across upgrades, while a path
+-- explicitly selected in the editor remains authoritative.
+GlobalSettings.systemdictionary = {filename="obsolete-default", custom=false}
+FireEvent("RegisterAddons")
+AssertEquals(DEFAULT_DICTIONARY_PATH, GlobalSettings.systemdictionary.filename)
+GlobalSettings.systemdictionary = {filename="explicit-selection", custom=true}
+FireEvent("RegisterAddons")
+AssertEquals("explicit-selection", GlobalSettings.systemdictionary.filename)
+GlobalSettings.systemdictionary = {filename="legacy-saved-selection"}
+FireEvent("RegisterAddons")
+AssertEquals("legacy-saved-selection", GlobalSettings.systemdictionary.filename)
+AssertEquals(true, GlobalSettings.systemdictionary.custom)
+GlobalSettings.systemdictionary.filename = nil
+
+-- Sorted dictionaries are searched directly through the mapped large-file
+-- backend. Exercise first/middle/last lines, misses on either side and an EOF
+-- without a trailing newline.
+local mappedDictionaryPath = wg.mkdtemp().."/sorted.words"
+AssertEquals(nil, select(2, wg.writefile(mappedDictionaryPath,
+	"alpha\nmundo\nomega")))
+GlobalSettings.systemdictionary = {filename=mappedDictionaryPath, custom=true}
+GlobalSettings.spellchecker.enabled = true
+GlobalSettings.spellchecker.usesystemdictionary = true
+GlobalSettings.spellchecker.useuserdictionary = false
+ResetSystemDictionaryCache()
+AssertEquals(false, IsWordMisspelt("alpha", false))
+AssertEquals(false, IsWordMisspelt("mundo", false))
+AssertEquals(false, IsWordMisspelt("omega", false))
+AssertEquals(true, IsWordMisspelt("aardvark", false))
+AssertEquals(true, IsWordMisspelt("beta", false))
+AssertEquals(true, IsWordMisspelt("zeta", false))
+AssertEquals("mapped", GetSystemDictionary().kind)
+ResetSystemDictionaryCache()
+
 local function unset(s)
 	local a = {}
 	for k in pairs(s) do
@@ -9,6 +43,25 @@ local function unset(s)
 	return a
 end
 
+SetSystemDictionaryForTesting({"lower", "UPPER", "there's"})
+
+-- A visual hyphen at the end of a wrapped line is not part of the stored
+-- word and must not create a false spelling error.
+SetSystemDictionaryForTesting({"completeword"})
+GlobalSettings.spellchecker.enabled = true
+GlobalSettings.spellchecker.usesystemdictionary = true
+GlobalSettings.spellchecker.useuserdictionary = false
+local wrappedPayload = {
+	word="complete-", spellingWord="completeword",
+	firstword=false, cstyle=0, ostyle=0,
+}
+FireEvent("DrawWord", wrappedPayload)
+AssertEquals(0, wrappedPayload.cstyle)
+local literalHyphenPayload = {
+	word="complete-", firstword=false, cstyle=0, ostyle=0,
+}
+FireEvent("DrawWord", literalHyphenPayload)
+AssertEquals(bit32.bor(wg.DIM, wg.UNDERLINE), literalHyphenPayload.cstyle)
 SetSystemDictionaryForTesting({"lower", "UPPER", "there's"})
 
 Cmd.InsertStringIntoWord("fnord")
@@ -40,12 +93,12 @@ AssertTableEquals({"fnord.", 0, 0},
 
 local payload = { word="There’s", cstyle=0, ostyle=0 }
 FireEvent("DrawWord", payload)
-AssertTableEquals({"There’s", wg.DIM, 0},
+AssertTableEquals({"There’s", bit32.bor(wg.DIM, wg.UNDERLINE), 0},
 	{payload.word, payload.cstyle, payload.ostyle})
 
 local payload = { word="notfound", cstyle=0, ostyle=0 }
 FireEvent("DrawWord", payload)
-AssertTableEquals({"notfound", wg.DIM, 0},
+AssertTableEquals({"notfound", bit32.bor(wg.DIM, wg.UNDERLINE), 0},
 	{payload.word, payload.cstyle, payload.ostyle})
 
 GlobalSettings.spellchecker.enabled = true

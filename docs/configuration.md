@@ -43,7 +43,14 @@ compatible word list can be selected under **Global settings → Load new system
 dictionary**. The same default can be compiled in with
 `-Ddictionary_path=/path/to/plain-word-list`. Dictionary formats containing
 affix rules or other metadata are not accepted directly; convert them to a
-plain word list first.
+plain word list first. See [Converting a Hunspell dictionary to a word
+list](hunspell-wordlists.md). The list must be byte-sorted so it can be queried
+directly with bounded memory instead of being loaded in full.
+
+Words which are absent from the selected dictionaries are dimmed and
+underlined. **Spellchecker → Find next misspelt word** selects the next unknown
+word. The built-in checker identifies unknown words but does not currently
+generate replacement suggestions.
 
 ## Per-set and per-document settings
 

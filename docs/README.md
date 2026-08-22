@@ -20,6 +20,8 @@ version 1.0 and native file format 8.
   persistence, limits, configuration, and benchmarking.
 - [Configuration](configuration.md): global and per-document settings, files,
   directories, dictionaries, and frontends.
+- [Converting Hunspell dictionaries](hunspell-wordlists.md): produce the plain
+  UTF-8 word-list format consumed by the built-in spellchecker.
 - [Scripting](scripting.md): command-line Lua, startup customisation, events,
   commands, and bundled utility scripts.
 - [Development](development.md): architecture, build options, tests, packaging,

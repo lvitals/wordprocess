@@ -135,6 +135,7 @@ function Paragraph.wrap(self, width)
 			-- get width of word (including space)
 			local ww = GetStringWidth(word) + 1
 			local available = math.max(width, 1)
+			local hasTrailingPunctuation = word:find("[%.%,%;%:%!%?]+$") ~= nil
 
 			-- A single uninterrupted word can be wider than the paper (most
 			-- commonly while key repeat is held). Represent it as visual
@@ -142,8 +143,16 @@ function Paragraph.wrap(self, width)
 			-- alter the stored word or exported text.
 			local hyphenate = GetWordWrapMode() == "Hyphenate"
 			local remaining = width - w
+			local punctuatedUnitFits = hasTrailingPunctuation and
+				(ww - 1) <= remaining
 			local splitatend = hyphenate and (#line > 0) and
 				((ww - 1) >= remaining) and (remaining >= 2)
+			-- Punctuation adjoining a word is one wrapping unit. If the complete
+			-- unit fits on a fresh line, move it there instead of manufacturing a
+			-- visual hyphen and leaving punctuation on the continuation line.
+			if splitatend and hasTrailingPunctuation and (ww - 1) <= available then
+				splitatend = false
+			end
 
 			if splitatend then
 				local finish = fragmentend(word, 1, remaining - 1)
@@ -213,6 +222,7 @@ function Paragraph.wrap(self, width)
 				-- chance when the word itself reaches the remaining space.
 				local overflow = hyphenate and (w > width) or
 					(not hyphenate and (w >= width))
+				if punctuatedUnitFits then overflow = false end
 				if overflow and (#line > 0) then
 					lines[#lines+1] = line
 					if #lines == 1 then
@@ -247,7 +257,8 @@ function Paragraph.renderLine(self, line, x, y)
 	assert(wd)
 
 	for _, wn in ipairs(line) do
-		local w = self[wn]
+		local spellingWord = self[wn]
+		local w = spellingWord
 		local wordx = wd.xs[wn]
 		local fragment = line.fragment
 		if line.trailingfragment and wn == line[#line] then
@@ -265,6 +276,7 @@ function Paragraph.renderLine(self, line, x, y)
 
 		local payload = {
 			word = w,
+			spellingWord = spellingWord,
 			ostyle = ostyle,
 			cstyle = cstyle,
 			firstword = wd.sentences[wn]
@@ -358,6 +370,7 @@ function Paragraph.renderMarkedLine(self, line, x, y, width, pn)
 		end
 		local payload = {
 			word = word,
+			spellingWord = self[w],
 			ostyle = ostyle,
 			cstyle = cstyle,
 			firstword = wd.sentences[wn]

@@ -6,7 +6,6 @@
 local GetWordText = wg.getwordtext
 local GetCwd = wg.getcwd
 local ChDir = wg.chdir
-local ReadFile = wg.readfile
 
 local USER_DICTIONARY_NAME = "User dictionary"
 local user_dictionary_cache
@@ -73,9 +72,18 @@ do
 			if migrated then SaveGlobalSettings() end
 		end
 
-		GlobalSettings.systemdictionary = GlobalSettings.systemdictionary or {
-			filename = find_default_dictionary()
-		}
+		GlobalSettings.systemdictionary = GlobalSettings.systemdictionary or {}
+		-- A path selected by the user wins. Otherwise follow the default from
+		-- this build, including after an upgrade or Meson reconfiguration.
+		if GlobalSettings.systemdictionary.custom == false or
+			not GlobalSettings.systemdictionary.filename then
+			GlobalSettings.systemdictionary.filename = find_default_dictionary()
+		elseif GlobalSettings.systemdictionary.custom == nil then
+			-- Settings written before the `custom` marker existed cannot tell us
+			-- how the path was chosen. Preserve the saved path: silently replacing
+			-- a valid dictionary is worse than requiring an explicit reset.
+			GlobalSettings.systemdictionary.custom = true
+		end
 	end
 
 	AddEventListener("RegisterAddons", cb)
@@ -115,30 +123,100 @@ end
 function GetSystemDictionary()
 	local settings = GlobalSettings.systemdictionary
 	if not system_dictionary_cache then
-		local c = {}
-		system_dictionary_cache = c
-
 		if settings.filename then
-			NonmodalMessage("Loading system dictionary '"
+			NonmodalMessage("Opening system dictionary '"
 				.. settings.filename .. "'")
-			local data, e = ReadFile(settings.filename)
-			if data then
-				local fp = CreateIStream(data)
-				for s in fp:lines() do
-					c[s] = s
-				end
+			local buffer, e = wg.opentextbuffer(settings.filename)
+			if buffer then
+				system_dictionary_cache = {
+					kind = "mapped",
+					buffer = buffer,
+					results = {},
+					resultCount = 0,
+				}
 			else
 				NonmodalMessage("Failed to load system dictionary: "
 					.. assert(e))
 			end
 			QueueRedraw()
 		end
+		system_dictionary_cache = system_dictionary_cache or {}
 	end
 	assert(system_dictionary_cache)
 	return system_dictionary_cache
 end
 
+local function mapped_dictionary_contains(dictionary, word)
+	local cached = dictionary.results[word]
+	if cached ~= nil then return cached end
+
+	local buffer = dictionary.buffer
+	local low, high = 0, buffer:size()
+	local found = false
+	local maxLineLength = 1024*1024
+	while low < high do
+		local middle = math.floor(low + (high - low) / 2)
+		local reverseLimit = math.max(0, middle - maxLineLength)
+		local previous = buffer:rfind(reverseLimit, 10, middle)
+		if not previous and reverseLimit > 0 then
+			ResetSystemDictionaryCache()
+			NonmodalMessage("System dictionary contains an excessively long line.")
+			return false
+		end
+		local lineStart = previous and (previous + 1) or 0
+		local forwardLimit = math.min(buffer:size(), lineStart + maxLineLength + 1)
+		local newline = buffer:find(lineStart, 10, forwardLimit)
+		if not newline and forwardLimit < buffer:size() then
+			ResetSystemDictionaryCache()
+			NonmodalMessage("System dictionary contains an excessively long line.")
+			return false
+		end
+		local lineEnd = newline or buffer:size()
+		if lineEnd - lineStart > maxLineLength then
+			-- A word-list line should be tiny. Refuse malformed sparse/corrupt
+			-- input rather than allocating an attacker-controlled multi-GiB slice.
+			ResetSystemDictionaryCache()
+			NonmodalMessage("System dictionary contains an excessively long line.")
+			return false
+		end
+		local candidate = buffer:slice(lineStart, lineEnd - lineStart):gsub("\r$", "")
+		if candidate == word then
+			found = true
+			break
+		elseif candidate < word then
+			low = newline and (newline + 1) or buffer:size()
+		else
+			high = lineStart
+		end
+	end
+
+	-- Cache only a bounded working set from the text being displayed. This is
+	-- independent of both dictionary and document size.
+	if dictionary.resultCount >= 4096 then
+		dictionary.results = {}
+		dictionary.resultCount = 0
+	end
+	dictionary.results[word] = found
+	dictionary.resultCount = dictionary.resultCount + 1
+	return found
+end
+
+local function system_dictionary_contains(dictionary, word)
+	if dictionary.kind == "mapped" then
+		return mapped_dictionary_contains(dictionary, word)
+	end
+	return dictionary[word] == word
+end
+
+function ResetSystemDictionaryCache()
+	if system_dictionary_cache and system_dictionary_cache.kind == "mapped" then
+		system_dictionary_cache.buffer:close()
+	end
+	system_dictionary_cache = nil
+end
+
 function SetSystemDictionaryForTesting(array)
+	ResetSystemDictionaryCache()
 	local c = {}
 	system_dictionary_cache = c
 
@@ -164,10 +242,11 @@ function IsWordMisspelt(word, firstword)
 		if (sci == "")
 			or (not sci:find("[a-zA-Z]"))
 			-- If the capitalisation matches.
-			or (systemdict[scs] == scs)
+			or system_dictionary_contains(systemdict, scs)
 			or (userdict[scs] == scs)
 			-- If the capitalisation does not match, but this is the first word of a sentence.
-			or (firstword and OnlyFirstCharIsUppercase(scs) and (systemdict[sci] == sci))
+			or (firstword and OnlyFirstCharIsUppercase(scs) and
+				system_dictionary_contains(systemdict, sci))
 			or (firstword and OnlyFirstCharIsUppercase(scs) and (userdict[sci] == sci))
 		then
 			misspelt = false
@@ -229,8 +308,13 @@ end
 
 do
 	local function cb(self, token, payload)
-		if IsWordMisspelt(payload.word, payload.firstword) then
-			payload.cstyle = bit32.bor(payload.cstyle, wg.DIM)
+		-- `word` is the visual fragment and may end in a hyphen inserted only
+		-- for line wrapping. Check the complete stored word when supplied.
+		if IsWordMisspelt(payload.spellingWord or payload.word,
+			payload.firstword) then
+			-- DIM alone is easy to miss in graphical themes. Underlining keeps
+			-- unknown words visibly identifiable on every frontend.
+			payload.cstyle = bit32.bor(payload.cstyle, wg.DIM, wg.UNDERLINE)
 		end
 	end
 
@@ -424,7 +508,7 @@ function Cmd.ConfigureSpellchecker()
 
 	settings.enabled = highlight_checkbox.value
 	settings.usesystemdictionary = systemdictionary_checkbox.value
-	system_dictionary_cache = nil
+	ResetSystemDictionaryCache()
 	settings.useuserdictionary = userdictionary_checkbox.value
 	SaveGlobalSettings()
 	return true
@@ -444,8 +528,9 @@ function Cmd.ConfigureSystemDictionary()
 	ChDir(oldcwd)
 
 	if filename then
-		system_dictionary_cache = nil
+		ResetSystemDictionaryCache()
 		settings.filename = filename
+		settings.custom = true
 		SaveGlobalSettings()
 	end
 
