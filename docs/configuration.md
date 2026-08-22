@@ -38,6 +38,13 @@ directory. Missing writable directories can be created from the dialog.
 Dictionary chooses the global word-list file. Recent files and optional debug
 status terms are also stored globally.
 
+The checker expects UTF-8 plain text with one complete word per line. Any
+compatible word list can be selected under **Global settings → Load new system
+dictionary**. The same default can be compiled in with
+`-Ddictionary_path=/path/to/plain-word-list`. Dictionary formats containing
+affix rules or other metadata are not accepted directly; convert them to a
+plain word list first.
+
 ## Per-set and per-document settings
 
 Autosave, scrapbook, and smart quotes belong to the document set and travel

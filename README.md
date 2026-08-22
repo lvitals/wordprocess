@@ -12,11 +12,21 @@ The native WordProcess document extension is `.wp`.
 WordProcess uses Meson and Ninja. Required development libraries include a
 system Lua implementation, ncursesw, libcmark, minizip, zlib, and stb headers.
 The graphical frontend additionally requires GLFW, OpenGL, and XCB.
+Spellchecking optionally uses a plain-text word list, one word per line. Meson
+looks for `/usr/share/dict/words` and warns, without failing the build, when it
+is absent. The file may be supplied by the operating system, installed
+separately, or provided by the user.
 
 ```sh
 meson setup builddir
 meson compile -C builddir
 meson test -C builddir
+```
+
+Select another dictionary at build time with, for example:
+
+```sh
+meson setup builddir -Ddictionary_path=/path/to/plain-word-list
 ```
 
 Distributors can set the version shown by the program and generated manual pages without editing source files:

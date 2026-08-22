@@ -34,8 +34,13 @@ the selected frontend's event loop.
 
 Meson generates an embedded Lua table with `tools/meson-multibin2c.py` and,
 for `xwp`, font and icon sources. Build options are `xwp`, `app_version`, and
-`lua_version`. The build detects stb headers in `/usr/include/stb` or
+`lua_version`, and `dictionary_path`. The build detects stb headers in `/usr/include/stb` or
 `/usr/local/include/stb`. The native format constant is currently 8.
+
+The spelling word list is optional and is never a link-time dependency. Meson
+reports whether `dictionary_path` exists and warns when it does not. The file
+must contain one complete word per line; Hunspell `.dic`/`.aff` files are not
+directly compatible and must first be expanded to a plain word list.
 
 Run the normal verification cycle with:
 
@@ -76,4 +81,3 @@ Distributors should set `app_version`, install the manual pages from `man/`,
 and may disable `xwp` for terminal-only packages. Preserve `NOTICE`, the main
 MIT licence, third-party licences, bundled dictionary notices, and the project
 origin acknowledgement.
-

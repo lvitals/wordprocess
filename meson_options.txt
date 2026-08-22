@@ -8,3 +8,6 @@ option('lua_version', type: 'combo',
   choices: ['auto', '5.1', '5.2', '5.3', '5.4', '5.5'],
   value: 'auto',
   description: 'System PUC-Rio Lua version to build against (pkg-config luaX.Y); auto picks the newest installed')
+
+option('dictionary_path', type: 'string', value: '/usr/share/dict/words',
+  description: 'Optional plain-text spelling word list (one word per line) used by default')

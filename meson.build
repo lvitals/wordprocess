@@ -8,6 +8,8 @@ project('wordprocess', 'c',
   default_options: ['c_std=gnu99', 'warning_level=1'],
 )
 
+fs = import('fs')
+
 # Phase 4: every source built by this Meson project is plain C99 -- there
 # is no 'cpp' language declared above. The legacy `ab` build system (which
 # used to compile these same files as C++ via per-directory build.py files)
@@ -16,7 +18,20 @@ project('wordprocess', 'c',
 
 # Native-Linux scope: ncurses wp frontend and GLFW/OpenGL xwp frontend.
 fileformat = 8
-default_dictionary_path = '/usr/share/dict/words'
+default_dictionary_path = get_option('dictionary_path')
+dictionary_available = fs.is_file(default_dictionary_path)
+if not dictionary_available
+  warning(
+    'Optional spelling dictionary not found at ' + default_dictionary_path + '.\n' +
+    'Spellchecking can still use the personal dictionary. Install or provide a ' +
+    'UTF-8 plain-text word list with one word per line, or configure ' +
+    '-Ddictionary_path=/path/to/plain-word-list.',
+  )
+endif
+summary({
+  'Default spelling dictionary': default_dictionary_path,
+  'Dictionary available': dictionary_available,
+}, section: 'Optional features')
 build_date = run_command('date', '+%-d %B %Y', check: true).stdout().strip()
 
 build_xwp = get_option('xwp')
@@ -63,7 +78,6 @@ endif
 # stb (stb_truetype.h/stb_rect_pack.h/stb_ds.h) is header-only with no
 # pkg-config file; used by both the ncurses frontend (stb_ds.h, for a couple
 # of small dynamic arrays) and the glfw frontend (all three headers).
-fs = import('fs')
 stb_candidates = ['/usr/include/stb', '/usr/local/include/stb']
 stb_dir = ''
 foreach c : stb_candidates
