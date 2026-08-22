@@ -114,8 +114,8 @@ local function MakeClassic()
 		Paper        = black,
 		MarkerFG     = white,
 		MisspeltFG   = {0.820, 0.412, 0.412},
-		ScrollbarFG  = black,
-		ScrollbarBG  = white,
+		ScrollbarFG  = {0.776, 0.776, 0.776}, -- #c6c6c6
+		ScrollbarBG  = black,
 		StatusbarFG  = black,
 		StatusbarBG  = white,
 		MessageFG    = black,
