@@ -312,9 +312,9 @@ do
 		-- for line wrapping. Check the complete stored word when supplied.
 		if IsWordMisspelt(payload.spellingWord or payload.word,
 			payload.firstword) then
-			-- DIM alone is easy to miss in graphical themes. Underlining keeps
-			-- unknown words visibly identifiable on every frontend.
-			payload.cstyle = bit32.bor(payload.cstyle, wg.DIM, wg.UNDERLINE)
+			-- Keep errors legible instead of dimming them into the background.
+			payload.cstyle = bit32.bor(payload.cstyle, wg.UNDERLINE)
+			payload.fg = Palette.MisspeltFG
 		end
 	end
 

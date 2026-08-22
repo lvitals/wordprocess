@@ -8,23 +8,27 @@ local table_remove = table.remove
 local string_char = string.char
 
 local function MakeDark()
-	local ink = {1, 1, 1}
-	local paper = {0.2, 0.2, 0.2}
-	local green = {0.100, 0.500, 0.500}
-	local headerfg = green
-	local headerbg = {0.3, 0.3, 0.3}
+	-- VS Code Dark Modern palette, shared with vix's dark-modern theme.
+	local ink = {0.800, 0.800, 0.800}          -- #cccccc
+	local paper = {0.122, 0.122, 0.122}        -- #1f1f1f
+	local headerfg = {0.337, 0.612, 0.839}     -- #569cd6
+	local headerbg = {0.169, 0.176, 0.180}     -- #2b2d2e
+	local statusbg = {0.000, 0.478, 0.800}     -- #007acc
 
 	return {
-		Desktop      = {0.135, 0.135, 0.135},
+		Desktop      = {0.094, 0.094, 0.094}, -- #181818
 		Paper        = paper,
-		MarkerFG     = green,
-		StatusbarBG  = {0.140, 0.220, 0.400},
-		StatusbarFG  = green,
-		MessageBG    = {0.140, 0.220, 0.400},
-		MessageFG    = green,
-		StyleFG      = {0.500, 0.500, 0.500},
-		ControlFG    = green,
-		ControlBG    = {0.140, 0.220, 0.400},
+		MarkerFG     = {0.522, 0.522, 0.522}, -- #858585
+		MisspeltFG   = {0.820, 0.412, 0.412}, -- #d16969
+		ScrollbarFG  = {0.776, 0.776, 0.776}, -- #c6c6c6
+		ScrollbarBG  = {0.094, 0.094, 0.094}, -- #181818
+		StatusbarBG  = statusbg,
+		StatusbarFG  = {1.000, 1.000, 1.000},
+		MessageBG    = statusbg,
+		MessageFG    = {1.000, 1.000, 1.000},
+		StyleFG      = {0.522, 0.522, 0.522}, -- #858585
+		ControlFG    = ink,
+		ControlBG    = {0.094, 0.094, 0.094}, -- #181818
 		H1_BG        = headerbg,
 		H1_FG        = headerfg,
 		H2_BG        = headerbg,
@@ -62,6 +66,9 @@ local function MakeLight()
 		Desktop      = {0.510, 0.500, 0.470},
 		Paper        = paper,
 		MarkerFG     = {0.250, 0.250, 0.250},
+		MisspeltFG   = {0.700, 0.200, 0.200},
+		ScrollbarFG  = {0.200, 0.200, 0.200},
+		ScrollbarBG  = {0.850, 0.850, 0.850},
 		StatusbarBG  = {0.140, 0.220, 0.400},
 		StatusbarFG  = {0.800, 0.700, 0.200},
 		MessageBG    = {0.140, 0.220, 0.400},
@@ -100,12 +107,15 @@ local function MakeClassic()
 	local ink = {0.8, 0.8, 0.8}
 	local white = {1, 1, 1}
 	local black = {0, 0, 0}
-	local yellow = {1, 1, 0}
+	local blue = {0.337, 0.612, 0.839}
 
 	return {
 		Desktop      = black,
 		Paper        = black,
 		MarkerFG     = white,
+		MisspeltFG   = {0.820, 0.412, 0.412},
+		ScrollbarFG  = black,
+		ScrollbarBG  = white,
 		StatusbarFG  = black,
 		StatusbarBG  = white,
 		MessageFG    = black,
@@ -114,13 +124,13 @@ local function MakeClassic()
 		ControlFG    = white,
 		ControlBG    = black,
 		H1_BG        = black,
-		H1_FG        = yellow,
+		H1_FG        = blue,
 		H2_BG        = black,
-		H2_FG        = yellow,
+		H2_FG        = blue,
 		H3_BG        = black,
-		H3_FG        = yellow,
+		H3_FG        = blue,
 		H4_BG        = black,
-		H4_FG        = yellow,
+		H4_FG        = blue,
 		LN_BG        = black,
 		LN_FG        = ink,
 		LB_BG        = black,
@@ -180,4 +190,3 @@ function SetColour(fg, bg)
 
 	wg.setcolour(fg, bg)
 end
-

@@ -524,8 +524,7 @@ local function drawscrollbar(top_y, bottom_y)
 		end
 
 		SetNormal()
-		SetColour(Palette.StatusbarFG, Palette.StatusbarBG)
-		SetReverse()
+		SetColour(Palette.ScrollbarFG, Palette.ScrollbarBG)
 		for row = geom.thumb_start, geom.thumb_start + geom.thumb_size - 1 do
 			Write(x, top_y + 1 + row, SCROLLBAR_SYMBOLS.thumb[u])
 		end
@@ -553,8 +552,7 @@ local function drawtextscrollbar(top_y, bottom_y, first, last, total)
 			Write(x, top_y + 1 + row, SCROLLBAR_SYMBOLS.track[u])
 		end
 		SetNormal()
-		SetColour(Palette.StatusbarFG, Palette.StatusbarBG)
-		SetReverse()
+		SetColour(Palette.ScrollbarFG, Palette.ScrollbarBG)
 		for row = geom.thumb_start, geom.thumb_start + geom.thumb_size - 1 do
 			Write(x, top_y + 1 + row, SCROLLBAR_SYMBOLS.thumb[u])
 		end

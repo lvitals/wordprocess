@@ -61,7 +61,8 @@ local literalHyphenPayload = {
 	word="complete-", firstword=false, cstyle=0, ostyle=0,
 }
 FireEvent("DrawWord", literalHyphenPayload)
-AssertEquals(bit32.bor(wg.DIM, wg.UNDERLINE), literalHyphenPayload.cstyle)
+AssertEquals(wg.UNDERLINE, literalHyphenPayload.cstyle)
+AssertEquals(Palette.MisspeltFG, literalHyphenPayload.fg)
 SetSystemDictionaryForTesting({"lower", "UPPER", "there's"})
 
 Cmd.InsertStringIntoWord("fnord")
@@ -93,12 +94,12 @@ AssertTableEquals({"fnord.", 0, 0},
 
 local payload = { word="There’s", cstyle=0, ostyle=0 }
 FireEvent("DrawWord", payload)
-AssertTableEquals({"There’s", bit32.bor(wg.DIM, wg.UNDERLINE), 0},
+AssertTableEquals({"There’s", wg.UNDERLINE, 0},
 	{payload.word, payload.cstyle, payload.ostyle})
 
 local payload = { word="notfound", cstyle=0, ostyle=0 }
 FireEvent("DrawWord", payload)
-AssertTableEquals({"notfound", bit32.bor(wg.DIM, wg.UNDERLINE), 0},
+AssertTableEquals({"notfound", wg.UNDERLINE, 0},
 	{payload.word, payload.cstyle, payload.ostyle})
 
 GlobalSettings.spellchecker.enabled = true

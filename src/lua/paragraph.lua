@@ -283,10 +283,18 @@ function Paragraph.renderLine(self, line, x, y)
 		}
 		FireEvent("DrawWord", payload)
 
+		if payload.fg then
+			SetColour(payload.fg,
+				Palette[self.style.."_BG"] or Palette.P_BG)
+		end
 		ostyle = WriteStyled(
 			x+wordx, y,
 			payload.word,
 			payload.ostyle, 0, 0, payload.cstyle)
+		if payload.fg then
+			SetColour(Palette[self.style.."_FG"] or Palette.P_FG,
+				Palette[self.style.."_BG"] or Palette.P_BG)
+		end
 	end
 end
 
@@ -377,8 +385,16 @@ function Paragraph.renderMarkedLine(self, line, x, y, width, pn)
 		}
 		FireEvent("DrawWord", payload)
 
+		if payload.fg then
+			SetColour(payload.fg,
+				Palette[self.style.."_BG"] or Palette.P_BG)
+		end
 		ostyle = WriteStyled(x+wordx, y, payload.word,
 			payload.ostyle, s, e, payload.cstyle)
+		if payload.fg then
+			SetColour(Palette[self.style.."_FG"] or Palette.P_FG,
+				Palette[self.style.."_BG"] or Palette.P_BG)
+		end
 	end
 end
 
