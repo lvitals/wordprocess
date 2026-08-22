@@ -35,19 +35,24 @@ Fantasque fonts are defaults. Changes reinitialise the frontend.
 
 Directories configures the template directory and an optional central autosave
 directory. Missing writable directories can be created from the dialog.
-Dictionary chooses the global word-list file. Recent files and optional debug
+Dictionary chooses the global word-list files. Recent files and optional debug
 status terms are also stored globally.
 
-The checker expects UTF-8 plain text with one complete word per line. Any
-compatible word list can be selected under **Global settings → Load new system
-dictionary**. The same default can be compiled in with
+The checker expects UTF-8 plain text with one complete word per line. Multiple
+word lists can be enabled together under **Spellchecker → Configure
+Spellchecker**. Its language list uses `[x]` for enabled entries; use the arrow
+keys to select an entry and Space to toggle as many languages as needed. The
+dialog discovers the installed default, previously added files, and `*.words`
+files in `~/.wordprocess`. Any other compatible word list
+can be added under **Global settings → Load new system dictionary**. The same
+default can be compiled in with
 `-Ddictionary_path=/path/to/plain-word-list`. Dictionary formats containing
 affix rules or other metadata are not accepted directly; convert them to a
 plain word list first. See [Converting a Hunspell dictionary to a word
 list](hunspell-wordlists.md). The list must be byte-sorted so it can be queried
 directly with bounded memory instead of being loaded in full.
 
-Words which are absent from the selected dictionaries are dimmed and
+Words which are absent from all selected dictionaries are shown in red and
 underlined. **Spellchecker → Find next misspelt word** selects the next unknown
 word. The built-in checker identifies unknown words but does not currently
 generate replacement suggestions.

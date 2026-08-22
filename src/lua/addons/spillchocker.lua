@@ -73,16 +73,31 @@ do
 		end
 
 		GlobalSettings.systemdictionary = GlobalSettings.systemdictionary or {}
+		local dictionary_settings = GlobalSettings.systemdictionary
 		-- A path selected by the user wins. Otherwise follow the default from
 		-- this build, including after an upgrade or Meson reconfiguration.
-		if GlobalSettings.systemdictionary.custom == false or
-			not GlobalSettings.systemdictionary.filename then
-			GlobalSettings.systemdictionary.filename = find_default_dictionary()
-		elseif GlobalSettings.systemdictionary.custom == nil then
+		if dictionary_settings.custom == false or
+			not dictionary_settings.filename then
+			dictionary_settings.filename = find_default_dictionary()
+		elseif dictionary_settings.custom == nil then
 			-- Settings written before the `custom` marker existed cannot tell us
 			-- how the path was chosen. Preserve the saved path: silently replacing
 			-- a valid dictionary is worse than requiring an explicit reset.
-			GlobalSettings.systemdictionary.custom = true
+			dictionary_settings.custom = true
+		end
+
+		-- Migrate the former single dictionary setting. A custom dictionary is
+		-- combined with the installed default so bilingual setups work without
+		-- discarding either word list.
+		if not dictionary_settings.filenames then
+			dictionary_settings.filenames = {}
+			local default = find_default_dictionary()
+			if dictionary_settings.custom and
+				dictionary_settings.filename ~= default then
+				dictionary_settings.filenames[#dictionary_settings.filenames+1] = default
+			end
+			dictionary_settings.filenames[#dictionary_settings.filenames+1] =
+				dictionary_settings.filename
 		end
 	end
 
@@ -123,24 +138,33 @@ end
 function GetSystemDictionary()
 	local settings = GlobalSettings.systemdictionary
 	if not system_dictionary_cache then
-		if settings.filename then
-			NonmodalMessage("Opening system dictionary '"
-				.. settings.filename .. "'")
-			local buffer, e = wg.opentextbuffer(settings.filename)
+		local dictionaries = {}
+		local filenames = settings.filenames or
+			(settings.filename and {settings.filename}) or {}
+		for _, filename in ipairs(filenames) do
+			NonmodalMessage("Opening dictionary '" .. filename .. "'")
+			local buffer, e = wg.opentextbuffer(filename)
 			if buffer then
-				system_dictionary_cache = {
+				dictionaries[#dictionaries+1] = {
 					kind = "mapped",
 					buffer = buffer,
 					results = {},
 					resultCount = 0,
 				}
 			else
-				NonmodalMessage("Failed to load system dictionary: "
-					.. assert(e))
+				NonmodalMessage("Failed to load dictionary '" .. filename
+					.. "': " .. assert(e))
 			end
-			QueueRedraw()
 		end
-		system_dictionary_cache = system_dictionary_cache or {}
+		if #dictionaries == 1 then
+			system_dictionary_cache = dictionaries[1]
+		else
+			system_dictionary_cache = {
+				kind = "multiple",
+				dictionaries = dictionaries,
+			}
+		end
+		QueueRedraw()
 	end
 	assert(system_dictionary_cache)
 	return system_dictionary_cache
@@ -204,13 +228,25 @@ end
 local function system_dictionary_contains(dictionary, word)
 	if dictionary.kind == "mapped" then
 		return mapped_dictionary_contains(dictionary, word)
+	elseif dictionary.kind == "multiple" then
+		for _, item in ipairs(dictionary.dictionaries) do
+			if system_dictionary_contains(item, word) then return true end
+		end
+		return false
 	end
 	return dictionary[word] == word
 end
 
 function ResetSystemDictionaryCache()
-	if system_dictionary_cache and system_dictionary_cache.kind == "mapped" then
-		system_dictionary_cache.buffer:close()
+	local function close(dictionary)
+		if dictionary.kind == "mapped" then
+			dictionary.buffer:close()
+		elseif dictionary.kind == "multiple" then
+			for _, item in ipairs(dictionary.dictionaries) do close(item) end
+		end
+	end
+	if system_dictionary_cache then
+		close(system_dictionary_cache)
 	end
 	system_dictionary_cache = nil
 end
@@ -281,7 +317,8 @@ end
 local function add_word_to_user_dictionary(word)
 	word = GetWordSimpleText(word)
 	if word == "" then return true end
-	if (not GetUserDictionary()[word]) and (not GetSystemDictionary()[word]) then
+	if (not GetUserDictionary()[word]) and
+		(not system_dictionary_contains(GetSystemDictionary(), word)) then
 		local words = GlobalSettings.userdictionary
 		words[#words+1] = word
 		user_dictionary_cache = nil
@@ -435,6 +472,71 @@ end
 
 function Cmd.ConfigureSpellchecker()
 	local settings = get_spellchecker_settings()
+	local dictionary_settings = GlobalSettings.systemdictionary
+
+	local candidates, seen = {}, {}
+	local function add_candidate(filename)
+		if filename and filename ~= "" and not seen[filename] then
+			seen[filename] = true
+			candidates[#candidates+1] = filename
+		end
+	end
+	-- The build default may point at a user dictionary (for example
+	-- pt_BR.words), so discover installed system lists independently instead
+	-- of treating that default as the only available language.
+	local system_word_lists = {
+		"/usr/share/dict/words",
+		"/usr/share/dict/british-english",
+		"/usr/share/dict/spanish",
+		"/usr/share/dict/french",
+		"/usr/share/dict/ngerman",
+		"/usr/share/dict/italian",
+		"/usr/share/dict/catala",
+		"/usr/share/dict/finnish",
+	}
+	for _, filename in ipairs(system_word_lists) do
+		local info = wg.stat(filename)
+		if info and info.mode == "file" then add_candidate(filename) end
+	end
+	add_candidate(DEFAULT_DICTIONARY_PATH)
+	for _, filename in ipairs(dictionary_settings.filenames or {}) do
+		add_candidate(filename)
+	end
+	add_candidate(dictionary_settings.filename)
+	for _, name in ipairs(wg.readdir(CONFIGDIR) or {}) do
+		if name:match("%.words$") then add_candidate(CONFIGDIR.."/"..name) end
+	end
+	table.sort(candidates)
+
+	local selected = {}
+	for _, filename in ipairs(dictionary_settings.filenames or {}) do
+		selected[filename] = true
+	end
+
+	local language_names = {
+		en = "English", en_US = "English (United States)",
+		en_GB = "English (United Kingdom)",
+		pt = "Português", pt_BR = "Português (Brasil)",
+		pt_PT = "Português (Portugal)",
+		es = "Español", spanish = "Español",
+		fr = "Français", french = "Français",
+		de = "Deutsch", ngerman = "Deutsch",
+		it = "Italiano", italian = "Italiano",
+		["british-english"] = "English (United Kingdom)",
+		catala = "Català", finnish = "Suomi",
+	}
+	local function dictionary_label(filename)
+		local basename = filename:match("([^/\\]+)$") or filename
+		local code = basename:gsub("%.words$", "")
+		local language = language_names[code]
+		if basename == "words" then language = "English (system)" end
+		language = language or ("Custom — " .. code)
+		local displaypath = filename
+		if filename:sub(1, #CONFIGDIR) == CONFIGDIR then
+			displaypath = "~/.wordprocess" .. filename:sub(#CONFIGDIR + 1)
+		end
+		return language .. " — " .. displaypath
+	end
 
 	local highlight_checkbox =
 		Form.Checkbox {
@@ -460,11 +562,41 @@ function Cmd.ConfigureSpellchecker()
 			value = settings.useuserdictionary
 		}
 
+	local dictionary_items = {}
+	local function update_dictionary_label(item)
+		item.label = (item.selected and "[x] " or "[ ] ") ..
+			dictionary_label(item.filename)
+	end
+	for _, filename in ipairs(candidates) do
+		local item = {
+			filename = filename,
+			selected = not not selected[filename],
+		}
+		update_dictionary_label(item)
+		dictionary_items[#dictionary_items+1] = item
+	end
+
+	local dictionary_browser = Form.Browser {
+		x1 = 1, y1 = 8,
+		x2 = -1, y2 = -2,
+		data = dictionary_items,
+		cursor = 1,
+	}
+	dictionary_browser[" "] = function(self)
+		local item = self.data[self.cursor]
+		if item then
+			item.selected = not item.selected
+			update_dictionary_label(item)
+			self:draw()
+		end
+		return "nop"
+	end
+
 	local dialogue=
 	{
 		title = "Configure Spellchecker",
 		width = "large",
-		height = 7,
+		height = "large",
 		stretchy = false,
 
 		actions = {
@@ -488,7 +620,7 @@ function Cmd.ConfigureSpellchecker()
 				x1 = 1, y1 = 3,
 				x2 = 32, y2 = 3,
 				align = "left",
-				value = "Use system dictionary:"
+				value = "Use language dictionaries:"
 			},
 
 			Form.Label {
@@ -497,11 +629,20 @@ function Cmd.ConfigureSpellchecker()
 				align = "left",
 				value = "Use user dictionary:"
 			},
+
+			Form.Label {
+				x1 = 1, y1 = 7,
+				x2 = -1, y2 = 7,
+				align = "left",
+				value = "Languages — arrows select, SPACE enables/disables several:"
+			},
+
+			dictionary_browser,
 		}
 	}
 
 	local result = Form.Run(dialogue, RedrawScreen,
-		"SPACE to toggle, RETURN to confirm, "..ESCAPE_KEY.." to cancel")
+		"Arrows choose, SPACE toggles, RETURN confirms, "..ESCAPE_KEY.." cancels")
 	if not result then
 		return false
 	end
@@ -509,6 +650,13 @@ function Cmd.ConfigureSpellchecker()
 	settings.enabled = highlight_checkbox.value
 	settings.usesystemdictionary = systemdictionary_checkbox.value
 	ResetSystemDictionaryCache()
+	dictionary_settings.filenames = {}
+	for _, item in ipairs(dictionary_items) do
+		if item.selected then
+			dictionary_settings.filenames[#dictionary_settings.filenames+1] =
+				item.filename
+		end
+	end
 	settings.useuserdictionary = userdictionary_checkbox.value
 	SaveGlobalSettings()
 	return true
@@ -531,6 +679,12 @@ function Cmd.ConfigureSystemDictionary()
 		ResetSystemDictionaryCache()
 		settings.filename = filename
 		settings.custom = true
+		settings.filenames = settings.filenames or {}
+		local found = false
+		for _, existing in ipairs(settings.filenames) do
+			if existing == filename then found = true break end
+		end
+		if not found then settings.filenames[#settings.filenames+1] = filename end
 		SaveGlobalSettings()
 	end
 

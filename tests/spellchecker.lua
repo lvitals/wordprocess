@@ -6,9 +6,13 @@ loadfile("tests/testsuite.lua")()
 GlobalSettings.systemdictionary = {filename="obsolete-default", custom=false}
 FireEvent("RegisterAddons")
 AssertEquals(DEFAULT_DICTIONARY_PATH, GlobalSettings.systemdictionary.filename)
+AssertTableEquals({DEFAULT_DICTIONARY_PATH},
+	GlobalSettings.systemdictionary.filenames)
 GlobalSettings.systemdictionary = {filename="explicit-selection", custom=true}
 FireEvent("RegisterAddons")
 AssertEquals("explicit-selection", GlobalSettings.systemdictionary.filename)
+AssertTableEquals({DEFAULT_DICTIONARY_PATH, "explicit-selection"},
+	GlobalSettings.systemdictionary.filenames)
 GlobalSettings.systemdictionary = {filename="legacy-saved-selection"}
 FireEvent("RegisterAddons")
 AssertEquals("legacy-saved-selection", GlobalSettings.systemdictionary.filename)
@@ -33,6 +37,26 @@ AssertEquals(true, IsWordMisspelt("aardvark", false))
 AssertEquals(true, IsWordMisspelt("beta", false))
 AssertEquals(true, IsWordMisspelt("zeta", false))
 AssertEquals("mapped", GetSystemDictionary().kind)
+ResetSystemDictionaryCache()
+
+-- More than one selected word list is searched. A word is accepted when it
+-- occurs in any dictionary, which allows English and Portuguese lists to be
+-- enabled together.
+local englishDictionaryPath = wg.mkdtemp().."/english.words"
+local portugueseDictionaryPath = wg.mkdtemp().."/pt_BR.words"
+AssertEquals(nil, select(2, wg.writefile(englishDictionaryPath,
+	"hello\nworld\n")))
+AssertEquals(nil, select(2, wg.writefile(portugueseDictionaryPath,
+	"mundo\nolá\n")))
+GlobalSettings.systemdictionary = {
+	filenames={englishDictionaryPath, portugueseDictionaryPath}, custom=true,
+}
+ResetSystemDictionaryCache()
+AssertEquals(false, IsWordMisspelt("hello", false))
+AssertEquals(false, IsWordMisspelt("mundo", false))
+AssertEquals(true, IsWordMisspelt("missing", false))
+AssertEquals("multiple", GetSystemDictionary().kind)
+AssertEquals(2, #GetSystemDictionary().dictionaries)
 ResetSystemDictionaryCache()
 
 local function unset(s)
@@ -67,11 +91,11 @@ SetSystemDictionaryForTesting({"lower", "UPPER", "there's"})
 
 Cmd.InsertStringIntoWord("fnord")
 Cmd.AddToUserDictionary()
-AssertTableEquals({"fnord"}, unset(GetUserDictionary()))
+AssertEquals("fnord", GetUserDictionary().fnord)
 
 Cmd.DeleteWord()
 Cmd.AddToUserDictionary()
-AssertTableEquals({"fnord"}, unset(GetUserDictionary()))
+AssertEquals("fnord", GetUserDictionary().fnord)
 
 GlobalSettings.spellchecker.enabled = false
 local payload = { word="fnord", cstyle=0, ostyle=0 }
