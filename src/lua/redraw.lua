@@ -478,30 +478,44 @@ local function rowoffsetfromtop(topp, topw, cp, cw, co, height)
 	return row
 end
 
--- Works out how many wrapped lines the whole document occupies, and which
--- of those lines the topmost/bottommost currently-drawn paragraph+word
--- (currentDocument._topp/_topw/_botp/_botw, set by the fixed/jump drawing
--- passes above) correspond to. Used only to feed the scrollbar geometry
+-- Works out how many screen rows the whole document occupies, and which of
+-- those rows the topmost currently-drawn paragraph+word
+-- (currentDocument._topp/_topw, set by the fixed/jump drawing passes
+-- above) corresponds to. Used only to feed the scrollbar geometry
 -- calculation -- purely visual, never touches document state.
+--
+-- This has to mirror row-for-row what the drawing passes below actually
+-- put on screen, or the scrollbar thumb drifts out of proportion to what's
+-- visible. Two things after a paragraph's own text lines eat real rows
+-- there: its line-height multiplier (GetDocumentLineHeightRows -- more
+-- than 1 row per wrapped line under non-default line spacing) and the
+-- blank spacer rows between paragraphs (spaceAbove/spaceBelow, e.g. extra
+-- space around headings). Leaving either out means paragraphs with more
+-- of that spacing get undercounted relative to how many rows they
+-- actually take, which drifts the document total and the thumb's
+-- position in it.
 local function computelinerange()
 	local total = 0
-	local topline, botline
+	local topline
+	local count = #currentDocument
 
-	for pn = 1, #currentDocument do
+	for pn = 1, count do
 		local paragraph = currentDocument[pn]
+		local lineheight = GetDocumentLineHeightRows(currentDocument, paragraph.style)
 		local nlines = #paragraph:wrap().lines
 
 		if pn == currentDocument._topp then
-			topline = total + (paragraph:getLineOfWord(currentDocument._topw) or 1)
-		end
-		if pn == currentDocument._botp then
-			botline = total + (paragraph:getLineOfWord(currentDocument._botw) or nlines)
+			local line = paragraph:getLineOfWord(currentDocument._topw) or 1
+			topline = total + (line - 1) * lineheight + 1
 		end
 
-		total = total + nlines
+		total = total + nlines * lineheight
+		if pn < count then
+			total = total + currentDocument:spaceBelow(pn)
+		end
 	end
 
-	return total, topline, botline
+	return total, topline
 end
 
 -- top_y/bottom_y are the first/last screen row the scrollbar may use --
@@ -514,11 +528,20 @@ local function drawscrollbar(top_y, bottom_y)
 	end
 
 	local x = ScreenWidth - SCROLLBAR_WIDTH
-	local total, topline, botline = computelinerange()
+	local total, topline = computelinerange()
 
+	-- How many rows are actually filled with document text this frame is
+	-- read straight from the rows the drawing passes above recorded
+	-- (_topy/_boty) instead of being reconstructed from paragraph/word
+	-- positions here: a reconstruction can drift by a row or two right at
+	-- a paragraph transition with unusual spacing (e.g. a heading), which
+	-- is exactly what made the thumb visibly resize while scrolling even
+	-- once the `total`/`topline` accounting above already matched the
+	-- drawing passes.
 	local visible = 1
-	if topline and botline and (botline >= topline) then
-		visible = botline - topline + 1
+	if currentDocument._topy and currentDocument._boty and
+			(currentDocument._boty >= currentDocument._topy) then
+		visible = currentDocument._boty - currentDocument._topy + 1
 	end
 
 	local geom = ComputeScrollbarGeometry(total, topline or 1, visible, height)
@@ -688,8 +711,17 @@ local function redrawtextbuffer()
 	elseif terminators and offset >= document._textbuffer:size() and y <= max_y then
 		drawbottommarker(y)
 	end
-	drawtextscrollbar(0, status_y - 1, document._texttop or 0, offset,
-		document._textbuffer:size())
+	-- Measure the viewport in real (newline-delimited) lines rather than
+	-- bytes. Each screen row here always holds exactly one such line, but
+	-- how many *bytes* that line takes varies with its content (a heading
+	-- or blank line spans far fewer bytes than a full paragraph line), so
+	-- a byte-based "visible" span shrinks and grows with local content
+	-- density even though the same number of rows is always drawn. Line
+	-- counts don't have that problem: they track rows 1:1.
+	local topline = (document:getLineAtPosition(document._texttop or 0) or 1) - 1
+	local bottomline = (document:getLineAtPosition(offset) or (topline + 1)) - 1
+	local linecount = document:getLineCount() or (bottomline + 1)
+	drawtextscrollbar(0, status_y - 1, topline, bottomline, linecount)
 	redrawstatus()
 	GotoXY(lm + math.min(document:textCellOffset(cursor_display_start,
 		document._textpos),
@@ -847,6 +879,7 @@ function RedrawScreen()
 		local pn = cp - 1
 		currentDocument._topp = nil
 		currentDocument._topw = nil
+		currentDocument._topy = nil
 
 		while (y >= min_y) and (pn >= 1) do
 			local paragraph = currentDocument[pn]
@@ -864,6 +897,7 @@ function RedrawScreen()
 				if (y >= min_y) and (y <= max_y) then
 					currentDocument._topp = pn
 					currentDocument._topw = l.wn
+					currentDocument._topy = y
 				end
 				y = y - lineheight
 				if y < min_y then
@@ -876,9 +910,23 @@ function RedrawScreen()
 			pn = pn - 1
 		end
 
+		-- pn >= 1 here means the loop stopped because a line or a spacing
+		-- gap (e.g. the blank rows above a heading) pushed past the top of
+		-- the viewport, not because the document ran out above -- so the
+		-- viewport is fully packed edge-to-edge from here, blank spacer
+		-- rows included. Its real top row is min_y even when the last
+		-- actual text line landed a row or two below it: recording that
+		-- lower row instead undercounts how many rows are genuinely on
+		-- screen, which is what let the scrollbar thumb visibly resize
+		-- while scrolling past paragraphs with different spacing.
+		if pn >= 1 then
+			currentDocument._topy = min_y
+		end
+
 		-- Draw forwards from cp
 		y = y_cp
 		pn = cp
+		currentDocument._boty = nil
 		while (y <= max_y) and (pn <= #currentDocument) do
 			local paragraph = currentDocument[pn]
 			if not paragraph then
@@ -895,9 +943,11 @@ function RedrawScreen()
 					if not currentDocument._topp or (y == min_y) then
 						currentDocument._topp = pn
 						currentDocument._topw = l.wn
+						currentDocument._topy = y
 					end
 					currentDocument._botp = pn
 					currentDocument._botw = l.wn
+					currentDocument._boty = y
 				end
 				y = y + lineheight
 				if y > max_y then
@@ -909,9 +959,22 @@ function RedrawScreen()
 			pn = pn + 1
 		end
 
+		-- Symmetric with the backward pass above: pn still being a real
+		-- paragraph means a line or spacing gap pushed past the bottom of
+		-- the viewport rather than the document running out below, so the
+		-- viewport's real bottom row is max_y regardless of where the last
+		-- actual text line landed.
+		if pn <= #currentDocument then
+			currentDocument._boty = max_y
+		end
+
 		if not currentDocument._topp then
 			currentDocument._topp = 1
 			currentDocument._topw = 1
+			currentDocument._topy = min_y
+		end
+		if not currentDocument._boty then
+			currentDocument._boty = currentDocument._topy
 		end
 
 		if has_terminators and bot_marker_y then
@@ -1044,6 +1107,7 @@ function RedrawScreen()
 
 		currentDocument._topp = nil
 		currentDocument._topw = nil
+		currentDocument._topy = nil
 
 		while (y >= 0) do
 			local paragraph = currentDocument[pn]
@@ -1060,6 +1124,7 @@ function RedrawScreen()
 
 				currentDocument._topp = pn
 				currentDocument._topw = l.wn
+				currentDocument._topy = y
 				y = y - lineheight
 
 				if (y < 0) then
@@ -1081,6 +1146,7 @@ function RedrawScreen()
 		-- Draw forwards from sp
 		y = math.floor(ScreenHeight / 2) - sl * startlineheight
 		pn = sp
+		currentDocument._boty = nil
 		while (y < status_y) do
 			local paragraph = currentDocument[pn]
 			if not paragraph then
@@ -1098,10 +1164,12 @@ function RedrawScreen()
 				if not currentDocument._topp and (y == 0) then
 					currentDocument._topp = pn
 					currentDocument._topw = l.wn
+					currentDocument._topy = y
 				end
 
 				currentDocument._botp = pn
 				currentDocument._botw = l.wn
+				currentDocument._boty = y
 				y = y + lineheight
 
 				if (y >= status_y) then
@@ -1118,6 +1186,10 @@ function RedrawScreen()
 		if not currentDocument._topp then
 			currentDocument._topp = 1
 			currentDocument._topw = 1
+			currentDocument._topy = 0
+		end
+		if not currentDocument._boty then
+			currentDocument._boty = currentDocument._topy
 		end
 
 		if (y < status_y) and has_terminators then
