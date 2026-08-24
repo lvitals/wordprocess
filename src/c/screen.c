@@ -249,6 +249,12 @@ void decode_mouse_event(uni_t key, int* x, int* y, bool* b)
     *y = (key >> 8) & 0xff;
 }
 
+static int charavailable_cb(lua_State* L)
+{
+    lua_pushboolean(L, dpy_charavailable());
+    return 1;
+}
+
 static int getchar_cb(lua_State* L)
 {
     double t = -1.0;
@@ -349,6 +355,7 @@ void screen_init(const char* argv[])
         {"getboundedstring",    getboundedstring_cb   },
         {"getbytesofcharacter", getbytesofcharacter_cb},
         {"getchar",             getchar_cb            },
+        {"charavailable",       charavailable_cb      },
         {"useunicode",          useunicode_cb         },
         {"setunicode",          setunicode_cb         },
         {NULL,                  NULL                  }

@@ -418,6 +418,23 @@ uni_t dpy_getchar(double timeout)
     }
 }
 
+/* A non-blocking peek: read with no wait, then immediately push back
+ * whatever (if anything) came in, so the next real dpy_getchar() sees it
+ * exactly as if this call had never happened. Lets a caller tell "there is
+ * already a queued input event" apart from "there is nothing queued yet,
+ * only get one by waiting for it" -- e.g. to drain an already-buffered run
+ * of repeated events without also blocking on brand new ones. */
+bool dpy_charavailable(void)
+{
+    timeout(0);
+    wint_t c;
+    int r = get_wch(&c);
+    if (r == ERR)
+        return false;
+    unget_wch(c);
+    return true;
+}
+
 static const char* ncurses_prefix_to_name(const char* s)
 {
     if (strcmp(s, "KDC") == 0)

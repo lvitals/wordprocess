@@ -297,8 +297,57 @@ function WordProcessor(filename)
         oldmb = m.b
     end
 
+    -- A snapshot of everything a scroll-triggered cursor move (or the
+    -- selection change Cmd.MoveWhileSelected can make alongside it) could
+    -- touch, cheap enough to take on every scroll event.
+    local function position_snapshot()
+        local d = currentDocument
+        return d.cp, d.cw, d.co, d.mp, d.mw, d.mo,
+            d._textpos, d._textmark, d._texttop
+    end
+
+    local function position_changed(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+        local b1, b2, b3, b4, b5, b6, b7, b8, b9 = position_snapshot()
+        return a1 ~= b1 or a2 ~= b2 or a3 ~= b3 or a4 ~= b4 or a5 ~= b5 or
+            a6 ~= b6 or a7 ~= b7 or a8 ~= b8 or a9 ~= b9
+    end
+
+    local SCROLL_KEYS = { KEY_SCROLLUP = true, KEY_SCROLLDOWN = true }
+
+    -- Once a mouse-wheel scroll lands on the start/end of the document and
+    -- genuinely moves nothing, every *already-queued* repeat of that same
+    -- direction is guaranteed to be an equally inert no-op too -- nothing
+    -- about the document changes in between them for the check below to
+    -- come out any differently. A fast wheel spin easily queues far more
+    -- scroll events than fit on screen, and without draining those already-
+    -- known-useless repeats here, reversing direction has to wait for each
+    -- of them to get its own redraw+dispatch pass before the first
+    -- effective move in the new direction is even reached.
+    --
+    -- wg.charavailable() is a true peek: unlike wg.getchar(0), it never
+    -- waits for or picks up a *new* event, only reports one that's already
+    -- sitting in the queue from before this call. Bounding the drain to
+    -- that is what keeps this from turning into an unbounded loop while
+    -- the wheel is still actively spinning in the same direction -- such a
+    -- loop would never return to the redraw at the top of eventloop(),
+    -- making the whole window appear frozen for as long as the scrolling
+    -- continued. Whatever non-matching event ends the run (a different
+    -- key, a mouse event, or simply nothing more queued) is handed back to
+    -- the caller so it goes through the exact same dispatch as any other
+    -- event, rather than a partial copy of it here.
+    local function drain_exhausted_scroll(c)
+        while wg.charavailable() do
+            local next_c = wg.getchar(0)
+            if next_c ~= c then
+                return next_c
+            end
+        end
+        return nil
+    end
+
     local function eventloop()
         local nl = string.char(13)
+        local pending_event = nil
         while true do
             if documentSet._justchanged then
                 FireEvent("Changed")
@@ -307,16 +356,21 @@ function WordProcessor(filename)
 
             FlushAsyncEvents()
             FireEvent("WaitingForUser")
-            local c= "KEY_TIMEOUT"
-            while (c == "KEY_TIMEOUT") do
-                if redrawpending then
-                    RedrawScreen()
-                    redrawpending = false
-                end
+            local c
+            if pending_event ~= nil then
+                c, pending_event = pending_event, nil
+            else
+                c = "KEY_TIMEOUT"
+                while (c == "KEY_TIMEOUT") do
+                    if redrawpending then
+                        RedrawScreen()
+                        redrawpending = false
+                    end
 
-                c = GetCharWithBlinkingCursor(IDLE_TIME)
-                if (c == "KEY_TIMEOUT") then
-                    FireEvent("Idle")
+                    c = GetCharWithBlinkingCursor(IDLE_TIME)
+                    if (c == "KEY_TIMEOUT") then
+                        FireEvent("Idle")
+                    end
                 end
             end
             if c ~= "KEY_RESIZE" then
@@ -324,6 +378,12 @@ function WordProcessor(filename)
             end
             if type(c) == "table" then
                 handle_mouse_event(c)
+            elseif SCROLL_KEYS[c] then
+                local s1, s2, s3, s4, s5, s6, s7, s8, s9 = position_snapshot()
+                handle_key_event(c)
+                if not position_changed(s1, s2, s3, s4, s5, s6, s7, s8, s9) then
+                    pending_event = drain_exhausted_scroll(c)
+                end
             else
                 handle_key_event(c)
             end

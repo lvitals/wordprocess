@@ -544,6 +544,19 @@ uni_t dpy_getchar(double timeout)
     }
 }
 
+/* Unlike dpy_getchar(0), this never calls into GLFW's event pump -- it only
+ * reports what has already been queued by a *previous* call to
+ * dpy_getchar(). That makes it safe for a caller to loop on this to drain
+ * an already-queued run of repeated events (e.g. mouse-wheel scroll ticks
+ * stacked up past the end of a document) without that loop also picking up
+ * brand new events for as long as the input device keeps producing them --
+ * which would starve the redraw loop for as long as the user kept
+ * scrolling. */
+bool dpy_charavailable(void)
+{
+    return !keyboardQueue_empty();
+}
+
 const char* dpy_getkeyname(uni_t k)
 {
     static char buffer[32];
