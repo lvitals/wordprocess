@@ -58,6 +58,7 @@ wordprocess_lua_srcs = files(
   'addons/smartquotes.lua',
   'addons/undo.lua',
   'addons/spillchocker.lua',
+  'addons/hyphenation.lua',
   'addons/templates.lua',
   'addons/directories.lua',
   'addons/recents.lua',

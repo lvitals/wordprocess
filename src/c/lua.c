@@ -268,6 +268,9 @@ void script_init(void)
     lua_pushstring(L, STRINGIFY(DICTIONARY_DIR));
     lua_setglobal(L, "DICTIONARY_DIR");
 
+    lua_pushstring(L, STRINGIFY(HYPHENATION_DIR));
+    lua_setglobal(L, "HYPHENATION_DIR");
+
     lua_pushcfunction(L, loadstring_cb);
     lua_setglobal(L, "loadstring");
 

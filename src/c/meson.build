@@ -23,6 +23,7 @@ wordprocess_common_srcs = files('lua.c', 'clipboard.c')
 wordprocess_common_c_args = [
   '-DDEFAULT_DICTIONARY_PATH=' + default_dictionary_path,
   '-DDICTIONARY_DIR=' + dictionary_dir,
+  '-DHYPHENATION_DIR=' + hyphenation_dir,
   '-DVERSION=' + app_version,
   '-DWORDPROCESS_STOCK_LUA',
 ]

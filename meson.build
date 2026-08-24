@@ -30,11 +30,16 @@ if default_dictionary_path != '' and not dictionary_available
     '-Ddictionary_path=/path/to/plain-word-list.',
   )
 endif
+hyphenation_dir = get_option('hyphenation_dir')
+hyphenation_dir_available = fs.is_dir(hyphenation_dir)
+
 summary({
   'Default spelling dictionary': default_dictionary_path,
   'Spelling dictionaries directory': dictionary_dir,
   'Dictionary available': dictionary_available,
   'Dictionaries directory available': dictionary_dir_available,
+  'Hyphenation patterns directory': hyphenation_dir,
+  'Hyphenation patterns directory available': hyphenation_dir_available,
 }, section: 'Optional features')
 build_date = run_command('date', '+%-d %B %Y', check: true).stdout().strip()
 

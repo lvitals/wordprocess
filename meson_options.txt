@@ -14,3 +14,6 @@ option('dictionary_path', type: 'string', value: '',
 
 option('dictionary_dir', type: 'string', value: '/usr/share/dict',
   description: 'Directory scanned at runtime for selectable spelling word lists')
+
+option('hyphenation_dir', type: 'string', value: '/usr/share/hyphen',
+  description: 'Directory scanned at runtime for selectable hyphenation pattern files (the standard libhyphen hyph_*.dic format used by LibreOffice/Firefox/TeX)')

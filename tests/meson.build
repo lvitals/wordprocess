@@ -10,7 +10,7 @@ wordprocess_tests = [
   'export-to-markdown', 'export-to-opendocument', 'export-to-org',
   'export-to-text', 'export-to-troff', 'filesystem', 'find-and-replace',
   'fixed-mode-click-preserves-viewport',
-  'get-style-from-word', 'heading-styles', 'immutable-paragraphs',
+  'get-style-from-word', 'heading-styles', 'hyphenation', 'immutable-paragraphs',
   'import-from-html', 'import-from-markdown', 'import-from-opendocument',
   'import-from-text', 'import-from-wordstar', 'insert-space-with-style-hint',
   'line-boundary-navigation', 'line-down-into-style', 'line-up',

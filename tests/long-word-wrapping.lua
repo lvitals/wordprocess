@@ -6,6 +6,13 @@ loadfile("tests/testsuite.lua")()
 GlobalSettings.lookandfeel.firstlineindent = false
 UpdateDocumentStyles()
 
+-- This file exercises the plain character-counting fallback specifically,
+-- so it must not pick up whichever real hyphenation pattern files (if any)
+-- happen to be installed on the machine running the tests; that behaviour
+-- is covered on its own, with synthetic pattern files, in tests/hyphenation.lua.
+GlobalSettings.hyphenation = {filenames = {}}
+ResetHyphenationPatternCache()
+
 local para = currentDocument[1]
 para[1] = "abcdefghijklmnopqrst"
 currentDocument:wrap(8)

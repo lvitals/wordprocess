@@ -148,6 +148,70 @@ function Paragraph.wrap(self, width)
 			return count
 		end
 
+		-- Picks where to end a hyphenated fragment of `word` starting at
+		-- byte `start`, no wider than `contentwidth` columns. Prefers the
+		-- widest linguistically valid syllable boundary --
+		-- GetHyphenationPoints, backed by whichever language pattern files
+		-- are selected in Configure Hyphenation -- that leaves at least
+		-- `minfragmentchars` characters on both sides. Falls back to the
+		-- widest plain character cut meeting the same minimum when no
+		-- pattern file recognises the word (or none are selected at all),
+		-- so hyphenation keeps working exactly as before wherever no
+		-- language data is available. Returns nil if `word` is too short
+		-- for the minimum to be satisfiable here at all.
+		local function choosehyphenpoint(word, start, contentwidth, minfragmentchars)
+			local maxfit = fragmentend(word, start, contentwidth)
+			if maxfit > #word then
+				-- The rest of the word already fits without splitting it at
+				-- all (this happens when a hyphenated word's remainder, now
+				-- starting a fresh line, is short enough to fit whole): there
+				-- is nothing to hyphenate, regardless of any interior
+				-- syllable boundary a pattern file might otherwise offer.
+				return maxfit
+			end
+
+			-- The language itself may require more than the generic minimum
+			-- (e.g. English patterns declare 2 characters before a break but
+			-- 3 after); never less than what the caller already asks for.
+			local leftmin, rightmin = GetHyphenationMinimums(word)
+			leftmin = math.max(leftmin, minfragmentchars)
+			rightmin = math.max(rightmin, minfragmentchars)
+
+			local best
+			for _, p in ipairs(GetHyphenationPoints(word)) do
+				if p > start and p <= maxfit and
+					charcount(word, start, p) >= leftmin and
+					charcount(word, p, #word + 1) >= rightmin and
+					(not best or p > best) then
+					best = p
+				end
+			end
+			if best then
+				return best
+			end
+
+			-- A fragment that reaches the true end of the word has nothing
+			-- after it at all -- there is no "orphan suffix" to guard
+			-- against, so the minimum only applies to the suffix side while
+			-- there still is one.
+			local reachesend = maxfit > #word
+			local finish = maxfit
+			while (finish > start) and
+				(charcount(word, start, finish) > minfragmentchars) and
+				(not reachesend) and
+				(charcount(word, finish, #word + 1) < minfragmentchars) do
+				local boundary = PrevCharInWord(word, finish)
+				if not boundary or boundary <= start then break end
+				finish = boundary
+			end
+			if (charcount(word, start, finish) < minfragmentchars) or
+				((not reachesend) and
+					(charcount(word, finish, #word + 1) < minfragmentchars)) then
+				return nil
+			end
+			return finish
+		end
+
 		-- Breaks `word` from byte `start` to its end into successive
 		-- fragments no wider than `contentwidth`, appending one line per
 		-- fragment. Used both for a word too wide for a whole fresh line
@@ -161,7 +225,13 @@ function Paragraph.wrap(self, width)
 			local minfragmentchars = 2
 			local fragments = {}
 			while start <= #word do
-				local finish = fragmentend(word, start, contentwidth)
+				local finish
+				if hyphenate then
+					finish = choosehyphenpoint(word, start, contentwidth, minfragmentchars) or
+						fragmentend(word, start, contentwidth)
+				else
+					finish = fragmentend(word, start, contentwidth)
+				end
 				fragments[#fragments+1] = {start = start, finish = finish}
 				start = finish
 			end
@@ -233,24 +303,13 @@ function Paragraph.wrap(self, width)
 			if splitatend then
 				-- Never hyphenate so close to either edge of the word that a
 				-- single orphan letter is left dangling alone on its own line
-				-- (e.g. "pode-" / "m"). Shrink the fragment, without ever
-				-- growing it past what fits, until both sides meet the
-				-- minimum; if the word is too short for that, give up and let
-				-- the whole word move to a fresh line instead.
-				local minfragmentchars = 2
-				local finish = fragmentend(word, 1, remaining - 1)
-				while (finish > 1) and
-					(charcount(word, 1, finish) > minfragmentchars) and
-					(charcount(word, finish, #word + 1) < minfragmentchars) do
-					local boundary = PrevCharInWord(word, finish)
-					if not boundary then break end
-					finish = boundary
-				end
-				if (charcount(word, 1, finish) < minfragmentchars) or
-					(charcount(word, finish, #word + 1) < minfragmentchars) then
+				-- (e.g. "pode-" / "m"); prefer a real syllable boundary over
+				-- an arbitrary character cut where language data allows it. If
+				-- the word is too short to satisfy the minimum at all, give up
+				-- and let the whole word move to a fresh line instead.
+				splitfinish = choosehyphenpoint(word, 1, remaining - 1, 2)
+				if not splitfinish then
 					splitatend = false
-				else
-					splitfinish = finish
 				end
 			end
 

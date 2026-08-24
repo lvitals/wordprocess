@@ -160,6 +160,7 @@ local DocumentSettingsMenu = CreateMenu("Document settings",
 	E("FSPageCount",    "P", "Page count...",     nil,         Cmd.ConfigurePageCount),
 	E("FSSmartquotes",  "Q", "Smart quotes...",   nil,         Cmd.ConfigureSmartQuotes),
 	E("FSSpellchecker", "C", "Spellchecker...",   nil,         Cmd.ConfigureSpellchecker),
+	E("FSHyphenation",  "Y", "Hyphenation...",    nil,         Cmd.ConfigureHyphenation),
 })
 
 local GlobalSettingsMenu = CreateMenu("Global settings",
