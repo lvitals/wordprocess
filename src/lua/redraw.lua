@@ -500,25 +500,87 @@ end
 -- of that spacing get undercounted relative to how many rows they
 -- actually take, which drifts the document total and the thumb's
 -- position in it.
+-- Cumulative rows occupied by paragraphs [1, target_p) -- i.e. everything
+-- strictly before target_p. Called once per redraw with the current
+-- viewport's top paragraph, which during an unbroken scroll only moves by
+-- a paragraph or two between one redraw and the next. Rather than
+-- resumming from paragraph 1 every time (which is what made every scroll
+-- tick as expensive as opening the document afresh, on top of the same
+-- cost already paid for `total` below), walk forward or back from
+-- wherever the last call left off and adjust by just the paragraphs in
+-- between.
+local function linesBeforeParagraph(target_p)
+	local document = currentDocument
+	local p = document._toplineanchorp
+	local v = document._toplineanchorv
+
+	-- The "Changed" listener below clears the anchor on every edit made
+	-- through the normal event loop, but code that mutates the document
+	-- and redraws without going through that loop (as tests do) gets no
+	-- such notice. An anchor left pointing past the document's new end --
+	-- e.g. after a select-all + Backspace shrinks a long document down to
+	-- one paragraph -- would otherwise walk clean off the end of it.
+	-- Falling back to a full recompute from paragraph 1 here is the same
+	-- cost the uncached code always paid, just confined to this rarer
+	-- case instead of every redraw.
+	if not p or p < 1 or p > (#document + 1) then
+		p, v = 1, 0
+	end
+
+	if p <= target_p then
+		while p < target_p do
+			local paragraph = document[p]
+			v = v + #paragraph:wrap().lines *
+				GetDocumentLineHeightRows(document, paragraph.style) +
+				document:spaceBelow(p)
+			p = p + 1
+		end
+	else
+		while p > target_p do
+			p = p - 1
+			local paragraph = document[p]
+			v = v - (#paragraph:wrap().lines *
+				GetDocumentLineHeightRows(document, paragraph.style) +
+				document:spaceBelow(p))
+		end
+	end
+
+	document._toplineanchorp = p
+	document._toplineanchorv = v
+	return v
+end
+
 local function computelinerange()
-	local total = 0
+	local document = currentDocument
+	local count = #document
+
+	-- The document's total row count only changes on an edit or a rewrap
+	-- (width change) -- both invalidate this cache explicitly (see
+	-- Document.wrap() and the "Changed" listener below) -- so a plain
+	-- scroll or cursor move, however long it continues, reuses the same
+	-- cached total instead of re-walking and re-wrapping every paragraph
+	-- in the document on every single redraw.
+	local total = document._totallines
+	if not total then
+		total = 0
+		for pn = 1, count do
+			local paragraph = document[pn]
+			total = total + #paragraph:wrap().lines *
+				GetDocumentLineHeightRows(document, paragraph.style)
+			if pn < count then
+				total = total + document:spaceBelow(pn)
+			end
+		end
+		document._totallines = total
+	end
+
 	local topline
-	local count = #currentDocument
-
-	for pn = 1, count do
-		local paragraph = currentDocument[pn]
-		local lineheight = GetDocumentLineHeightRows(currentDocument, paragraph.style)
-		local nlines = #paragraph:wrap().lines
-
-		if pn == currentDocument._topp then
-			local line = paragraph:getLineOfWord(currentDocument._topw) or 1
-			topline = total + (line - 1) * lineheight + 1
-		end
-
-		total = total + nlines * lineheight
-		if pn < count then
-			total = total + currentDocument:spaceBelow(pn)
-		end
+	local topp = document._topp
+	if topp and document[topp] then
+		local paragraph = document[topp]
+		local lineheight = GetDocumentLineHeightRows(document, paragraph.style)
+		local line = paragraph:getLineOfWord(document._topw) or 1
+		topline = linesBeforeParagraph(topp) + (line - 1) * lineheight + 1
 	end
 
 	return total, topline
@@ -818,17 +880,32 @@ function RedrawScreen()
 		if row then
 			cy = min_y + row
 		else
+			-- Once the running total already exceeds the viewport, the
+			-- cursor is guaranteed to clamp to max_y below no matter how
+			-- much further from the document start it actually is -- so
+			-- there's no need to keep walking every paragraph back to
+			-- paragraph 1 (which, deep into a long document, is exactly
+			-- what turned every off-viewport scroll tick into an
+			-- O(document length) redraw). Stop as soon as the answer is
+			-- already decided, same as rowoffsetfromtop does for its own
+			-- forward search above.
+			local viewport_height = max_y - min_y + 1
 			local lines_before = 0
-			for p = 1, cp - 1 do
+			local p = 1
+			while (p < cp) and (lines_before < viewport_height) do
 				local wd = currentDocument[p]:wrap()
 				lines_before = lines_before + #wd.lines *
 					GetDocumentLineHeightRows(currentDocument,
 						currentDocument[p].style) + currentDocument:spaceBelow(p)
+				p = p + 1
 			end
-			lines_before = lines_before +
-				(currentDocument[cp]:getLineOfWord(cw, co) - 1) *
-				GetDocumentLineHeightRows(currentDocument,
-					currentDocument[cp].style)
+
+			if lines_before < viewport_height then
+				lines_before = lines_before +
+					(currentDocument[cp]:getLineOfWord(cw, co) - 1) *
+					GetDocumentLineHeightRows(currentDocument,
+						currentDocument[cp].style)
+			end
 
 			if (min_y + lines_before) <= max_y then
 				cy = min_y + lines_before
@@ -1260,6 +1337,13 @@ end
 do
 	local function cb(event, token)
 		currentDocument:renumber()
+
+		-- An edit can change any paragraph's line count (or the paragraph
+		-- count itself), invalidating the scrollbar's cached total and the
+		-- topline anchor computelinerange() builds on above.
+		currentDocument._totallines = nil
+		currentDocument._toplineanchorp = nil
+		currentDocument._toplineanchorv = nil
 	end
 
 	AddEventListener("Changed", cb)

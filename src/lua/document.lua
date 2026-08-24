@@ -47,6 +47,13 @@ end
 
 function Document.wrap(self, width)
 	self._wrapwidth = width
+
+	-- Every paragraph's cached line count is now stale, so the scrollbar's
+	-- cached document total and topline anchor (see computelinerange() in
+	-- redraw.lua) are too.
+	self._totallines = nil
+	self._toplineanchorp = nil
+	self._toplineanchorv = nil
 end
 
 function Document.usesTextBuffer(self)
