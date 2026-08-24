@@ -311,10 +311,31 @@ function IsWordMisspelt(word, firstword)
 		local sci = scs:lower()
 		local properName = firstword == false and
 			OnlyFirstCharIsUppercase(scs) and not scs:find("[’']")
+		local uppercaseIdentifier = scs:find("[A-Z]") and
+			not scs:find("[a-z]")
+		local compoundIdentifier = scs:find("+", 1, true)
+		if compoundIdentifier then
+			for component in scs:gmatch("[^+]+") do
+				local lower = component:lower()
+				local uppercase = component:find("[A-Z]") and
+					not component:find("[a-z]")
+				if not uppercase and
+					not system_dictionary_contains(systemdict, component) and
+					not system_dictionary_contains(systemdict, lower) and
+					userdict[component] ~= component and userdict[lower] ~= lower then
+					compoundIdentifier = false
+					break
+				end
+			end
+		end
 		if (sci == "")
 			or (not sci:find("[a-zA-Z]"))
 			-- Title-case words inside a sentence are proper-name candidates.
 			or properName
+			-- Uppercase identifiers and '+' compounds are conventional names for
+			-- acronyms, keys and shortcuts rather than ordinary prose words.
+			or uppercaseIdentifier
+			or compoundIdentifier
 			-- If the capitalisation matches.
 			or system_dictionary_contains(systemdict, scs)
 			or (userdict[scs] == scs)

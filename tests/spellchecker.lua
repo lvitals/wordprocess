@@ -167,8 +167,8 @@ AssertEquals(false, IsWordMisspelt("Lower", false))
 AssertEquals(false, IsWordMisspelt("Maristela", false))
 AssertEquals(true, IsWordMisspelt("Maristela", true))
 
-AssertEquals(true, IsWordMisspelt("LOWER", true))
-AssertEquals(true, IsWordMisspelt("LOWER", false))
+AssertEquals(false, IsWordMisspelt("LOWER", true))
+AssertEquals(false, IsWordMisspelt("LOWER", false))
 
 AssertEquals(true, IsWordMisspelt("upper", true))
 AssertEquals(true, IsWordMisspelt("Upper", true))
@@ -177,6 +177,20 @@ AssertEquals(false, IsWordMisspelt("Upper", false))
 
 AssertEquals(false, IsWordMisspelt("UPPER", true))
 AssertEquals(false, IsWordMisspelt("UPPER", false))
+
+-- Technical tokens used by compatibility-09.wp are identifiers or keyboard
+-- combinations, not prose words. No individual key name is hard-coded.
+SetSystemDictionaryForTesting({"WordPress", "favourite", "customisation",
+	"navigation", "letter"})
+AssertEquals(false, IsWordMisspelt("WordPress", false))
+AssertEquals(false, IsWordMisspelt("favourite", false))
+AssertEquals(false, IsWordMisspelt("customisation", false))
+AssertEquals(false, IsWordMisspelt("Navigation", true))
+AssertEquals(false, IsWordMisspelt("ESC", false))
+AssertEquals(false, IsWordMisspelt("RETURN", false))
+AssertEquals(false, IsWordMisspelt("CTRL+C", false))
+AssertEquals(false, IsWordMisspelt("ALT+letter", false))
+SetSystemDictionaryForTesting({"lower", "UPPER", "there's"})
 
 AssertEquals(false, IsWordMisspelt("there’s", false))
 AssertEquals(true, IsWordMisspelt("There’s", false))
