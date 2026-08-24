@@ -34,8 +34,8 @@ hyphenation_dir = get_option('hyphenation_dir')
 hyphenation_dir_available = fs.is_dir(hyphenation_dir)
 
 summary({
-  'Default spelling dictionary': default_dictionary_path,
-  'Spelling dictionaries directory': dictionary_dir,
+  'Default spelling dictionary': default_dictionary_path == '' ? '(none configured; set with -Ddictionary_path)' : default_dictionary_path,
+  'Spelling dictionaries directory': dictionary_dir == '' ? '(none configured; set with -Ddictionary_dir)' : dictionary_dir,
   'Dictionary available': dictionary_available,
   'Dictionaries directory available': dictionary_dir_available,
   'Hyphenation patterns directory': hyphenation_dir,
