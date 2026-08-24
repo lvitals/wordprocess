@@ -760,6 +760,7 @@ function Cmd.GotoXYPosition(x, y)
 	if r then
 		currentDocument.cp = r.p
 		currentDocument.cw = r.w
+		currentDocument.co = 1
 		return Cmd.GotoXPosition(x - r.x)
 	end
 	return false
