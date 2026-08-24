@@ -334,13 +334,16 @@ function IsWordMisspelt(word, firstword)
 			-- Recognise two-part closed compounds, including CamelCase, only when
 			-- both independently derived components occur in a selected dictionary.
 			local lower = candidate:lower()
+			-- Accept a regular plural only when its singular form is present. This
+			-- recovers inflections omitted by generated word lists without inventing
+			-- vocabulary or storing language-specific words.
+			local singular = lower:match("^(.+)s$")
+			if singular and known(singular) then return remember(true) end
+
 			for boundary = 2, #lower do
 				local prefix = lower:sub(1, boundary - 1)
 				local base = lower:sub(boundary)
-				local camelBoundary = candidate:sub(boundary, boundary):find("[A-Z]")
-				local prefixStructure = #prefix < #base
-				if (camelBoundary or prefixStructure) and known(prefix) and
-					known(base) then
+				if known(prefix) and known(base) then
 					return remember(true)
 				end
 			end
@@ -440,6 +443,8 @@ local function add_word_to_user_dictionary(word)
 		local words = GlobalSettings.userdictionary
 		words[#words+1] = word
 		user_dictionary_cache = nil
+		composition_cache = {}
+		composition_cache_count = 0
 		SaveGlobalSettings()
 		NonmodalMessage("Word '"..word.."' added to user dictionary")
 	else

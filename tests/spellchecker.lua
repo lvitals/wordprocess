@@ -182,7 +182,8 @@ AssertEquals(false, IsWordMisspelt("UPPER", false))
 -- combinations, not prose words. No individual key name is hard-coded.
 SetSystemDictionaryForTesting({"WordPress", "favourite", "customisation",
 	"navigation", "italicised", "style", "italic", "plain", "underline",
-	"word", "process", "sub", "documents", "letter"})
+	"word", "process", "sub", "documents", "letter", "glyph", "path",
+	"name", "chip", "set"})
 AssertEquals(false, IsWordMisspelt("WordPress", false))
 AssertEquals(false, IsWordMisspelt("WordProcess", true))
 AssertEquals(false, IsWordMisspelt("favourite", false))
@@ -193,6 +194,9 @@ AssertEquals(false, IsWordMisspelt("Style→Italic", false))
 AssertEquals(false, IsWordMisspelt("Style→Plain", false))
 AssertEquals(false, IsWordMisspelt("Style→Underline", false))
 AssertEquals(false, IsWordMisspelt("subdocuments", false))
+AssertEquals(false, IsWordMisspelt("glyphs", false))
+AssertEquals(false, IsWordMisspelt("pathname", false))
+AssertEquals(false, IsWordMisspelt("chipset", false))
 AssertEquals(false, IsWordMisspelt("ESC", false))
 AssertEquals(false, IsWordMisspelt("RETURN", false))
 AssertEquals(false, IsWordMisspelt("CTRL+C", false))

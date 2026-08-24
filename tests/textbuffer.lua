@@ -635,7 +635,7 @@ AssertEquals('"quoted"', clipDocument._textbuffer:slice(0, 8))
 GlobalSettings.spellchecker = {
 	enabled=true, usesystemdictionary=true, useuserdictionary=false
 }
-SetSystemDictionaryForTesting({"quoted", "hello", "world"})
+SetSystemDictionaryForTesting({"quoted", "hello"})
 clipDocument._textmark = nil
 clipDocument._textpos = 0
 AssertEquals(true, Cmd.FindNextMisspeltWord())
