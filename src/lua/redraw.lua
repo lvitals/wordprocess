@@ -304,13 +304,26 @@ local function drawtopmarker(y)
 	SetNormal()
 	SetColour(Palette.MarkerFG, Palette.Desktop)
 	if y >= 2 then
+		-- Each tick is 10 columns apart and labelled with how many tens of
+		-- columns it is from the margin (0, 1, 2, ..., 9, 10, 11, ...) --
+		-- this must keep counting past 9 rather than wrapping back to a
+		-- single digit, or ticks past column 100 would be ambiguous.
 		local n = 0
 		for i = lm, rm, 10 do
-			Write(i, y-2, SYMBOLS[n][u])
-			n = n + 1
-			if n == 10 then
-				n = 0
+			local digits = tostring(n)
+			local label = {}
+			for d = 1, #digits do
+				label[d] = SYMBOLS[tonumber(digits:sub(d, d))][u]
 			end
+			-- Keep the label as one unbroken run (splitting it around the
+			-- tick column reads as two separate numbers instead of one),
+			-- nudged left by half its digit count so it settles roughly on
+			-- the tick (column `i`, where the ▼ mark is drawn one row
+			-- below) instead of always starting there -- the more digits
+			-- get added, the further left it shifts.
+			local shift = #digits // 2
+			Write(math.max(lm, i - shift), y-2, table.concat(label))
+			n = n + 1
 		end
 	end
 	if y >= 1 then
