@@ -265,6 +265,8 @@ void script_init(void)
 
     lua_pushstring(L, STRINGIFY(DEFAULT_DICTIONARY_PATH));
     lua_setglobal(L, "DEFAULT_DICTIONARY_PATH");
+    lua_pushstring(L, STRINGIFY(DICTIONARY_DIR));
+    lua_setglobal(L, "DICTIONARY_DIR");
 
     lua_pushcfunction(L, loadstring_cb);
     lua_setglobal(L, "loadstring");

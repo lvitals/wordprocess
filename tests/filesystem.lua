@@ -14,7 +14,7 @@ AssertTableEquals({ ".", "..", "baz" }, t)
 t, _, errno = wg.stat(dir.."/foo/bar/baz")
 AssertEquals(nil, errno)
 AssertEquals("directory", t.mode)
+AssertEquals(false, t.symlink)
 
 t, _, errno = wg.stat(dir.."/foo/bar/bloo")
 AssertEquals(wg.ENOENT, errno)
-

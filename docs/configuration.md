@@ -42,15 +42,19 @@ The checker expects UTF-8 plain text with one complete word per line. Multiple
 word lists can be enabled together under **Spellchecker → Configure
 Spellchecker**. Its language list uses `[x]` for enabled entries; use the arrow
 keys to select an entry and Space to toggle as many languages as needed. The
-dialog discovers the installed default, previously added files, and `*.words`
-files in `~/.wordprocess`. Any other compatible word list
+dialog discovers every real file in the build-configured dictionary directory,
+previously added files, and `*.words` files in `~/.wordprocess`. Symbolic-link
+aliases are omitted to avoid duplicate or language-ambiguous entries. Any compatible word list
 can be added under **Global settings → Load new system dictionary**. The same
-default can be compiled in with
+directory can be compiled in with `-Ddictionary_dir=/path/to/dictionaries`.
+An optional initial selection uses
 `-Ddictionary_path=/path/to/plain-word-list`. Dictionary formats containing
 affix rules or other metadata are not accepted directly; convert them to a
 plain word list first. See [Converting a Hunspell dictionary to a word
-list](hunspell-wordlists.md). The list must be byte-sorted so it can be queried
-directly with bounded memory instead of being loaded in full.
+list](hunspell-wordlists.md). Lists do not need to use a particular sort order;
+they are queried through a compact page-prefix index. Only candidate pages are
+read for each lookup, and a bounded result cache keeps redraw and navigation
+responsive without loading the complete dictionaries into Lua tables.
 
 Words which are absent from all selected dictionaries are shown in red and
 underlined. **Spellchecker → Find next misspelt word** selects the next unknown

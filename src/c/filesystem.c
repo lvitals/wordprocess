@@ -276,6 +276,16 @@ static int stat_cb(lua_State* L)
     lua_pushstring(L, "mode");
     lua_pushstring(L, S_ISDIR(st.st_mode) ? "directory" : "file");
     lua_settable(L, -3);
+
+    bool symlink = false;
+#ifndef WIN32
+    struct stat link_st;
+    if (lstat(filename, &link_st) == 0)
+        symlink = S_ISLNK(link_st.st_mode);
+#endif
+    lua_pushstring(L, "symlink");
+    lua_pushboolean(L, symlink);
+    lua_settable(L, -3);
     return 1;
 }
 

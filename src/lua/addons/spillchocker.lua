@@ -8,8 +8,33 @@ local GetCwd = wg.getcwd
 local ChDir = wg.chdir
 
 local USER_DICTIONARY_NAME = "User dictionary"
+local MAX_CACHED_DICTIONARY_LOOKUPS = 4096
+-- Match the project's normal streaming block size: pages remain small enough
+-- for redraw-time reads while amortising text-buffer calls on large lists.
+local DICTIONARY_PAGE_BYTES = 64 * 1024
+-- Two leading bytes sharply reduce candidate pages, including for UTF-8 words,
+-- while keeping the per-page index bounded and cheap to construct.
+local DICTIONARY_INDEX_PREFIX_BYTES = 2
 local user_dictionary_cache
 local system_dictionary_cache
+
+function DiscoverSystemDictionaries(directory)
+	local dictionaries = {}
+	for _, name in ipairs(wg.readdir(directory) or {}) do
+		if name:sub(1, 1) ~= "." then
+			local filename = directory.."/"..name
+			local info = wg.stat(filename)
+			-- Package aliases (including /usr/share/dict/words) are symlinks.
+			-- Listing only their real files avoids duplicates without knowing any
+			-- distribution-specific filename or language in advance.
+			if info and info.mode == "file" and not info.symlink then
+				dictionaries[#dictionaries+1] = filename
+			end
+		end
+	end
+	table.sort(dictionaries)
+	return dictionaries
+end
 
 local function get_spellchecker_settings()
 	GlobalSettings.spellchecker = GlobalSettings.spellchecker or {
@@ -77,7 +102,7 @@ do
 		-- A path selected by the user wins. Otherwise follow the default from
 		-- this build, including after an upgrade or Meson reconfiguration.
 		if dictionary_settings.custom == false or
-			not dictionary_settings.filename then
+			not dictionary_settings.filename or dictionary_settings.filename == "" then
 			dictionary_settings.filename = find_default_dictionary()
 		elseif dictionary_settings.custom == nil then
 			-- Settings written before the `custom` marker existed cannot tell us
@@ -92,13 +117,26 @@ do
 		if not dictionary_settings.filenames then
 			dictionary_settings.filenames = {}
 			local default = find_default_dictionary()
-			if dictionary_settings.custom and
+			if default ~= "" and dictionary_settings.custom and
 				dictionary_settings.filename ~= default then
 				dictionary_settings.filenames[#dictionary_settings.filenames+1] = default
 			end
-			dictionary_settings.filenames[#dictionary_settings.filenames+1] =
-				dictionary_settings.filename
+			if dictionary_settings.filename ~= "" then
+				dictionary_settings.filenames[#dictionary_settings.filenames+1] =
+					dictionary_settings.filename
+			end
 		end
+
+		-- Remove aliases saved by older versions. Their targets remain available
+		-- as independently selectable entries discovered from DICTIONARY_DIR.
+		local filenames = {}
+		for _, filename in ipairs(dictionary_settings.filenames) do
+			local info = wg.stat(filename)
+			if not info or not info.symlink then
+				filenames[#filenames+1] = filename
+			end
+		end
+		dictionary_settings.filenames = filenames
 	end
 
 	AddEventListener("RegisterAddons", cb)
@@ -175,48 +213,44 @@ local function mapped_dictionary_contains(dictionary, word)
 	if cached ~= nil then return cached end
 
 	local buffer = dictionary.buffer
-	local low, high = 0, buffer:size()
+	if not dictionary.pages then
+		dictionary.pages = {}
+		local size = buffer:size()
+		local start = 0
+		while start < size do
+			local nominalEnd = math.min(size, start + DICTIONARY_PAGE_BYTES)
+			local newline = nominalEnd < size and
+				buffer:find(nominalEnd, 10, size) or nil
+			local finish = newline and (newline + 1) or size
+			local text = buffer:slice(start, finish - start)
+			local prefixes = {}
+			for line in text:gmatch("[^\r\n]+") do
+				prefixes[line:sub(1, DICTIONARY_INDEX_PREFIX_BYTES)] = true
+			end
+			dictionary.pages[#dictionary.pages+1] = {
+				start = start, finish = finish, prefixes = prefixes,
+			}
+			start = finish
+		end
+	end
+
 	local found = false
-	local maxLineLength = 1024*1024
-	while low < high do
-		local middle = math.floor(low + (high - low) / 2)
-		local reverseLimit = math.max(0, middle - maxLineLength)
-		local previous = buffer:rfind(reverseLimit, 10, middle)
-		if not previous and reverseLimit > 0 then
-			ResetSystemDictionaryCache()
-			NonmodalMessage("System dictionary contains an excessively long line.")
-			return false
-		end
-		local lineStart = previous and (previous + 1) or 0
-		local forwardLimit = math.min(buffer:size(), lineStart + maxLineLength + 1)
-		local newline = buffer:find(lineStart, 10, forwardLimit)
-		if not newline and forwardLimit < buffer:size() then
-			ResetSystemDictionaryCache()
-			NonmodalMessage("System dictionary contains an excessively long line.")
-			return false
-		end
-		local lineEnd = newline or buffer:size()
-		if lineEnd - lineStart > maxLineLength then
-			-- A word-list line should be tiny. Refuse malformed sparse/corrupt
-			-- input rather than allocating an attacker-controlled multi-GiB slice.
-			ResetSystemDictionaryCache()
-			NonmodalMessage("System dictionary contains an excessively long line.")
-			return false
-		end
-		local candidate = buffer:slice(lineStart, lineEnd - lineStart):gsub("\r$", "")
-		if candidate == word then
-			found = true
-			break
-		elseif candidate < word then
-			low = newline and (newline + 1) or buffer:size()
-		else
-			high = lineStart
+	local prefix = word:sub(1, DICTIONARY_INDEX_PREFIX_BYTES)
+	for _, page in ipairs(dictionary.pages) do
+		if page.prefixes[prefix] then
+			local text = "\n" .. buffer:slice(page.start,
+				page.finish - page.start) .. "\n"
+			if text:find("\n" .. word .. "\n", 1, true) or
+				text:find("\n" .. word .. "\r\n", 1, true) then
+				found = true
+				break
+			end
 		end
 	end
 
 	-- Cache only a bounded working set from the text being displayed. This is
 	-- independent of both dictionary and document size.
-	if dictionary.resultCount >= 4096 then
+	if dictionary.resultCount >= MAX_CACHED_DICTIONARY_LOOKUPS then
 		dictionary.results = {}
 		dictionary.resultCount = 0
 	end
@@ -275,8 +309,12 @@ function IsWordMisspelt(word, firstword)
 		end
 		local scs = GetWordSimpleText(word)
 		local sci = scs:lower()
+		local properName = firstword == false and
+			OnlyFirstCharIsUppercase(scs) and not scs:find("[’']")
 		if (sci == "")
 			or (not sci:find("[a-zA-Z]"))
+			-- Title-case words inside a sentence are proper-name candidates.
+			or properName
 			-- If the capitalisation matches.
 			or system_dictionary_contains(systemdict, scs)
 			or (userdict[scs] == scs)
@@ -484,25 +522,22 @@ function Cmd.ConfigureSpellchecker()
 	-- The build default may point at a user dictionary (for example
 	-- pt_BR.words), so discover installed system lists independently instead
 	-- of treating that default as the only available language.
-	local system_word_lists = {
-		"/usr/share/dict/words",
-		"/usr/share/dict/british-english",
-		"/usr/share/dict/spanish",
-		"/usr/share/dict/french",
-		"/usr/share/dict/ngerman",
-		"/usr/share/dict/italian",
-		"/usr/share/dict/catala",
-		"/usr/share/dict/finnish",
-	}
-	for _, filename in ipairs(system_word_lists) do
-		local info = wg.stat(filename)
-		if info and info.mode == "file" then add_candidate(filename) end
-	end
-	add_candidate(DEFAULT_DICTIONARY_PATH)
-	for _, filename in ipairs(dictionary_settings.filenames or {}) do
+	for _, filename in ipairs(DiscoverSystemDictionaries(DICTIONARY_DIR)) do
 		add_candidate(filename)
 	end
-	add_candidate(dictionary_settings.filename)
+	local default_info = wg.stat(DEFAULT_DICTIONARY_PATH)
+	if default_info and not default_info.symlink then
+		add_candidate(DEFAULT_DICTIONARY_PATH)
+	end
+	for _, filename in ipairs(dictionary_settings.filenames or {}) do
+		local info = wg.stat(filename)
+		if not info or not info.symlink then add_candidate(filename) end
+	end
+	local saved_info = dictionary_settings.filename and
+		wg.stat(dictionary_settings.filename)
+	if not saved_info or not saved_info.symlink then
+		add_candidate(dictionary_settings.filename)
+	end
 	for _, name in ipairs(wg.readdir(CONFIGDIR) or {}) do
 		if name:match("%.words$") then add_candidate(CONFIGDIR.."/"..name) end
 	end
@@ -510,32 +545,17 @@ function Cmd.ConfigureSpellchecker()
 
 	local selected = {}
 	for _, filename in ipairs(dictionary_settings.filenames or {}) do
-		selected[filename] = true
+		local info = wg.stat(filename)
+		if not info or not info.symlink then selected[filename] = true end
 	end
 
-	local language_names = {
-		en = "English", en_US = "English (United States)",
-		en_GB = "English (United Kingdom)",
-		pt = "Português", pt_BR = "Português (Brasil)",
-		pt_PT = "Português (Portugal)",
-		es = "Español", spanish = "Español",
-		fr = "Français", french = "Français",
-		de = "Deutsch", ngerman = "Deutsch",
-		it = "Italiano", italian = "Italiano",
-		["british-english"] = "English (United Kingdom)",
-		catala = "Català", finnish = "Suomi",
-	}
 	local function dictionary_label(filename)
 		local basename = filename:match("([^/\\]+)$") or filename
-		local code = basename:gsub("%.words$", "")
-		local language = language_names[code]
-		if basename == "words" then language = "English (system)" end
-		language = language or ("Custom — " .. code)
 		local displaypath = filename
 		if filename:sub(1, #CONFIGDIR) == CONFIGDIR then
 			displaypath = "~/.wordprocess" .. filename:sub(#CONFIGDIR + 1)
 		end
-		return language .. " — " .. displaypath
+		return basename .. " — " .. displaypath
 	end
 
 	local highlight_checkbox =

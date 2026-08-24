@@ -9,5 +9,8 @@ option('lua_version', type: 'combo',
   value: 'auto',
   description: 'System PUC-Rio Lua version to build against (pkg-config luaX.Y); auto picks the newest installed')
 
-option('dictionary_path', type: 'string', value: '/usr/share/dict/words',
-  description: 'Optional plain-text spelling word list (one word per line) used by default')
+option('dictionary_path', type: 'string', value: '',
+  description: 'Optional plain-text spelling word list selected initially')
+
+option('dictionary_dir', type: 'string', value: '/usr/share/dict',
+  description: 'Directory scanned at runtime for selectable spelling word lists')

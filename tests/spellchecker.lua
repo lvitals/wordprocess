@@ -1,17 +1,30 @@
 --!nonstrict
 loadfile("tests/testsuite.lua")()
 
+-- Dictionary discovery is directory based and includes newly installed
+-- language files automatically; the filesystem layer marks symlink aliases.
+local discoveryDir = wg.mkdtemp()
+AssertEquals(nil, select(2, wg.writefile(discoveryDir.."/american-english", "hello\n")))
+AssertEquals(nil, select(2, wg.writefile(discoveryDir.."/portuguese-brazilian", "olá\n")))
+AssertEquals(nil, select(2, wg.writefile(discoveryDir.."/words", "ambiguous\n")))
+AssertTableEquals({
+	discoveryDir.."/american-english",
+	discoveryDir.."/portuguese-brazilian",
+	discoveryDir.."/words",
+}, DiscoverSystemDictionaries(discoveryDir))
+
 -- Meson's dictionary_path remains the default across upgrades, while a path
 -- explicitly selected in the editor remains authoritative.
 GlobalSettings.systemdictionary = {filename="obsolete-default", custom=false}
 FireEvent("RegisterAddons")
 AssertEquals(DEFAULT_DICTIONARY_PATH, GlobalSettings.systemdictionary.filename)
-AssertTableEquals({DEFAULT_DICTIONARY_PATH},
-	GlobalSettings.systemdictionary.filenames)
+AssertTableEquals(DEFAULT_DICTIONARY_PATH == "" and {} or
+	{DEFAULT_DICTIONARY_PATH}, GlobalSettings.systemdictionary.filenames)
 GlobalSettings.systemdictionary = {filename="explicit-selection", custom=true}
 FireEvent("RegisterAddons")
 AssertEquals("explicit-selection", GlobalSettings.systemdictionary.filename)
-AssertTableEquals({DEFAULT_DICTIONARY_PATH, "explicit-selection"},
+AssertTableEquals(DEFAULT_DICTIONARY_PATH == "" and {"explicit-selection"} or
+	{DEFAULT_DICTIONARY_PATH, "explicit-selection"},
 	GlobalSettings.systemdictionary.filenames)
 GlobalSettings.systemdictionary = {filename="legacy-saved-selection"}
 FireEvent("RegisterAddons")
@@ -19,12 +32,12 @@ AssertEquals("legacy-saved-selection", GlobalSettings.systemdictionary.filename)
 AssertEquals(true, GlobalSettings.systemdictionary.custom)
 GlobalSettings.systemdictionary.filename = nil
 
--- Sorted dictionaries are searched directly through the mapped large-file
--- backend. Exercise first/middle/last lines, misses on either side and an EOF
--- without a trailing newline.
-local mappedDictionaryPath = wg.mkdtemp().."/sorted.words"
+-- Dictionaries are searched directly through the mapped large-file backend
+-- without assuming an order. Exercise present words, misses and an EOF without
+-- a trailing newline.
+local mappedDictionaryPath = wg.mkdtemp().."/unordered.words"
 AssertEquals(nil, select(2, wg.writefile(mappedDictionaryPath,
-	"alpha\nmundo\nomega")))
+	"omega\nalpha\nmundo")))
 GlobalSettings.systemdictionary = {filename=mappedDictionaryPath, custom=true}
 GlobalSettings.spellchecker.enabled = true
 GlobalSettings.spellchecker.usesystemdictionary = true
@@ -37,6 +50,21 @@ AssertEquals(true, IsWordMisspelt("aardvark", false))
 AssertEquals(true, IsWordMisspelt("beta", false))
 AssertEquals(true, IsWordMisspelt("zeta", false))
 AssertEquals("mapped", GetSystemDictionary().kind)
+AssertEquals(true, #GetSystemDictionary().pages > 0)
+ResetSystemDictionaryCache()
+
+-- A word beyond the first dictionary page remains available without loading
+-- the complete word list into a Lua table.
+local pagedDictionaryPath = wg.mkdtemp().."/paged.words"
+local linesPerPageExercise = 10000
+AssertEquals(nil, select(2, wg.writefile(pagedDictionaryPath,
+	string.rep("padding\n", linesPerPageExercise).."needle\n")))
+GlobalSettings.systemdictionary = {
+	filenames={pagedDictionaryPath}, custom=true,
+}
+ResetSystemDictionaryCache()
+AssertEquals(false, IsWordMisspelt("needle", false))
+AssertEquals(true, #GetSystemDictionary().pages > 1)
 ResetSystemDictionaryCache()
 
 -- More than one selected word list is searched. A word is accepted when it
@@ -132,7 +160,12 @@ GlobalSettings.spellchecker.usesystemdictionary = true
 AssertEquals(false, IsWordMisspelt("lower", true))
 AssertEquals(false, IsWordMisspelt("Lower", true))
 AssertEquals(false, IsWordMisspelt("lower", false))
-AssertEquals(true, IsWordMisspelt("Lower", false))
+AssertEquals(false, IsWordMisspelt("Lower", false))
+
+-- Unknown title-case words inside a sentence are treated as proper names,
+-- while the same token at a sentence boundary is still checked normally.
+AssertEquals(false, IsWordMisspelt("Maristela", false))
+AssertEquals(true, IsWordMisspelt("Maristela", true))
 
 AssertEquals(true, IsWordMisspelt("LOWER", true))
 AssertEquals(true, IsWordMisspelt("LOWER", false))
@@ -140,7 +173,7 @@ AssertEquals(true, IsWordMisspelt("LOWER", false))
 AssertEquals(true, IsWordMisspelt("upper", true))
 AssertEquals(true, IsWordMisspelt("Upper", true))
 AssertEquals(true, IsWordMisspelt("upper", false))
-AssertEquals(true, IsWordMisspelt("Upper", false))
+AssertEquals(false, IsWordMisspelt("Upper", false))
 
 AssertEquals(false, IsWordMisspelt("UPPER", true))
 AssertEquals(false, IsWordMisspelt("UPPER", false))

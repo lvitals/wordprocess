@@ -19,8 +19,10 @@ fs = import('fs')
 # Native-Linux scope: ncurses wp frontend and GLFW/OpenGL xwp frontend.
 fileformat = 8
 default_dictionary_path = get_option('dictionary_path')
-dictionary_available = fs.is_file(default_dictionary_path)
-if not dictionary_available
+dictionary_dir = get_option('dictionary_dir')
+dictionary_available = default_dictionary_path != '' and fs.is_file(default_dictionary_path)
+dictionary_dir_available = fs.is_dir(dictionary_dir)
+if default_dictionary_path != '' and not dictionary_available
   warning(
     'Optional spelling dictionary not found at ' + default_dictionary_path + '.\n' +
     'Spellchecking can still use the personal dictionary. Install or provide a ' +
@@ -30,7 +32,9 @@ if not dictionary_available
 endif
 summary({
   'Default spelling dictionary': default_dictionary_path,
+  'Spelling dictionaries directory': dictionary_dir,
   'Dictionary available': dictionary_available,
+  'Dictionaries directory available': dictionary_dir_available,
 }, section: 'Optional features')
 build_date = run_command('date', '+%-d %B %Y', check: true).stdout().strip()
 
