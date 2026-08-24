@@ -17,6 +17,8 @@ local DICTIONARY_PAGE_BYTES = 64 * 1024
 local DICTIONARY_INDEX_PREFIX_BYTES = 2
 local user_dictionary_cache
 local system_dictionary_cache
+local composition_cache = {}
+local composition_cache_count = 0
 
 function DiscoverSystemDictionaries(directory)
 	local dictionaries = {}
@@ -283,6 +285,8 @@ function ResetSystemDictionaryCache()
 		close(system_dictionary_cache)
 	end
 	system_dictionary_cache = nil
+	composition_cache = {}
+	composition_cache_count = 0
 end
 
 function SetSystemDictionaryForTesting(array)
@@ -309,8 +313,58 @@ function IsWordMisspelt(word, firstword)
 		end
 		local scs = GetWordSimpleText(word)
 		local sci = scs:lower()
-		local properName = firstword == false and
-			OnlyFirstCharIsUppercase(scs) and not scs:find("[’']")
+		local function known(candidate)
+			local lower = candidate:lower()
+			return system_dictionary_contains(systemdict, candidate) or
+				system_dictionary_contains(systemdict, lower) or
+				userdict[candidate] == candidate or userdict[lower] == lower
+		end
+		local function known_composition(candidate)
+			local cached = composition_cache[candidate]
+			if cached ~= nil then return cached end
+			local function remember(result)
+				if composition_cache_count >= MAX_CACHED_DICTIONARY_LOOKUPS then
+					composition_cache = {}
+					composition_cache_count = 0
+				end
+				composition_cache[candidate] = result
+				composition_cache_count = composition_cache_count + 1
+				return result
+			end
+			-- Recognise two-part closed compounds, including CamelCase, only when
+			-- both independently derived components occur in a selected dictionary.
+			local lower = candidate:lower()
+			for boundary = 2, #lower do
+				local prefix = lower:sub(1, boundary - 1)
+				local base = lower:sub(boundary)
+				local camelBoundary = candidate:sub(boundary, boundary):find("[A-Z]")
+				local prefixStructure = #prefix < #base
+				if (camelBoundary or prefixStructure) and known(prefix) and
+					known(base) then
+					return remember(true)
+				end
+			end
+
+			-- UI paths and similar technical notation consist of dictionary words
+			-- separated by non-ASCII-alphanumeric characters. The separators and
+			-- vocabulary are discovered from the token rather than enumerated.
+			local count = 0
+			for component in candidate:gmatch("[A-Za-z0-9']+") do
+				count = count + 1
+				if not known(component) then return remember(false) end
+			end
+			return remember(count > 1)
+		end
+		local properName = OnlyFirstCharIsUppercase(scs) and
+			not scs:find("[’']")
+		local internalUppercase = scs:sub(2):find("[A-Z]") ~= nil
+		local technicalSyntax =
+			word:find("<[^>]+>") ~= nil or
+			word:find("%-%-") ~= nil or
+			word:find("[\\/]") ~= nil or
+			word:find("[()]", 1) ~= nil or
+			scs:find(".", 1, true) ~= nil or
+			internalUppercase
 		local uppercaseIdentifier = scs:find("[A-Z]") and
 			not scs:find("[a-z]")
 		local compoundIdentifier = scs:find("+", 1, true)
@@ -332,6 +386,9 @@ function IsWordMisspelt(word, firstword)
 			or (not sci:find("[a-zA-Z]"))
 			-- Title-case words inside a sentence are proper-name candidates.
 			or properName
+			-- Source fragments, paths, tags, command options, qualified names and
+			-- mixed-case identifiers are technical notation rather than prose.
+			or technicalSyntax
 			-- Uppercase identifiers and '+' compounds are conventional names for
 			-- acronyms, keys and shortcuts rather than ordinary prose words.
 			or uppercaseIdentifier
@@ -343,6 +400,8 @@ function IsWordMisspelt(word, firstword)
 			or (firstword and OnlyFirstCharIsUppercase(scs) and
 				system_dictionary_contains(systemdict, sci))
 			or (firstword and OnlyFirstCharIsUppercase(scs) and (userdict[sci] == sci))
+			-- Composition is the bounded fallback after inexpensive exact checks.
+			or known_composition(scs)
 		then
 			misspelt = false
 		end

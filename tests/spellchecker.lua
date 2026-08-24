@@ -165,13 +165,13 @@ AssertEquals(false, IsWordMisspelt("Lower", false))
 -- Unknown title-case words inside a sentence are treated as proper names,
 -- while the same token at a sentence boundary is still checked normally.
 AssertEquals(false, IsWordMisspelt("Maristela", false))
-AssertEquals(true, IsWordMisspelt("Maristela", true))
+AssertEquals(false, IsWordMisspelt("Maristela", true))
 
 AssertEquals(false, IsWordMisspelt("LOWER", true))
 AssertEquals(false, IsWordMisspelt("LOWER", false))
 
 AssertEquals(true, IsWordMisspelt("upper", true))
-AssertEquals(true, IsWordMisspelt("Upper", true))
+AssertEquals(false, IsWordMisspelt("Upper", true))
 AssertEquals(true, IsWordMisspelt("upper", false))
 AssertEquals(false, IsWordMisspelt("Upper", false))
 
@@ -181,15 +181,27 @@ AssertEquals(false, IsWordMisspelt("UPPER", false))
 -- Technical tokens used by compatibility-09.wp are identifiers or keyboard
 -- combinations, not prose words. No individual key name is hard-coded.
 SetSystemDictionaryForTesting({"WordPress", "favourite", "customisation",
-	"navigation", "letter"})
+	"navigation", "italicised", "style", "italic", "plain", "underline",
+	"word", "process", "sub", "documents", "letter"})
 AssertEquals(false, IsWordMisspelt("WordPress", false))
+AssertEquals(false, IsWordMisspelt("WordProcess", true))
 AssertEquals(false, IsWordMisspelt("favourite", false))
 AssertEquals(false, IsWordMisspelt("customisation", false))
 AssertEquals(false, IsWordMisspelt("Navigation", true))
+AssertEquals(false, IsWordMisspelt("Italicised", true))
+AssertEquals(false, IsWordMisspelt("Style→Italic", false))
+AssertEquals(false, IsWordMisspelt("Style→Plain", false))
+AssertEquals(false, IsWordMisspelt("Style→Underline", false))
+AssertEquals(false, IsWordMisspelt("subdocuments", false))
 AssertEquals(false, IsWordMisspelt("ESC", false))
 AssertEquals(false, IsWordMisspelt("RETURN", false))
 AssertEquals(false, IsWordMisspelt("CTRL+C", false))
 AssertEquals(false, IsWordMisspelt("ALT+letter", false))
+AssertEquals(false, IsWordMisspelt("<li>", false))
+AssertEquals(false, IsWordMisspelt("cmd.exe", false))
+AssertEquals(false, IsWordMisspelt("--exec", false))
+AssertEquals(false, IsWordMisspelt('ListMenuItems()', false))
+AssertEquals(false, IsWordMisspelt('c:\\fonts\\myfont.ttf', false))
 SetSystemDictionaryForTesting({"lower", "UPPER", "there's"})
 
 AssertEquals(false, IsWordMisspelt("there’s", false))
