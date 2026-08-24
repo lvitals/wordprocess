@@ -147,17 +147,16 @@ function ResizeScreen()
 		local mingutter = currentDocument.margin + 2
 		paperwidth = math.max(1, math.min(w, usablewidth - mingutter))
 
-		if GetScrollMode() == "Fixed" then
-			-- Fixed mode shows the paper at full height starting from the
-			-- very top of the screen, which makes a wide centered left
-			-- gutter look like a large, unwanted blank strip running the
-			-- whole height of the window. Keep it to the minimum the
-			-- annotation actually needs instead of centering it.
-			papermargin = mingutter
-		else
-			local centeredmargin = math.floor((usablewidth - paperwidth) / 2)
-			papermargin = math.max(mingutter, centeredmargin)
-		end
+		-- Same centering in both scroll modes: when nothing narrower than
+		-- the screen constrains the paper, paperwidth already fills
+		-- usablewidth - mingutter, so this comes out to mingutter itself --
+		-- pinning the gutter to its minimum and filling the rest of the row
+		-- with paper, rather than a wide unused strip mirrored on the left.
+		-- It's only once a width cap (Column limit / Page preview) actually
+		-- leaves room to spare that this centers the (narrower) paper
+		-- within it, same as with no margin active.
+		local centeredmargin = math.floor((usablewidth - paperwidth) / 2)
+		papermargin = math.max(mingutter, centeredmargin)
 
 		-- Keep the blank strip on the right small -- about as wide as the
 		-- scrollbar column itself -- instead of mirroring the (often much
@@ -172,6 +171,13 @@ function ResizeScreen()
 	end
 	currentDocument:wrap(paperwidth)
 	return true
+end
+
+-- papermargin/paperwidth stay private module state (unlike ScreenWidth/
+-- ScreenHeight, which are plain globals) since nothing outside this file's
+-- drawing code should mutate them mid-frame. This is the read-only way in.
+function GetPaperLayout()
+	return papermargin, paperwidth
 end
 
 local function drawmargin(y, pn, p)
