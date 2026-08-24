@@ -631,6 +631,15 @@ local function redrawtextbuffer()
 		min_y, top_marker = 3, 2
 	end
 
+	-- Navigation commands (arrows, Goto, search, page up/down) keep _texttop
+	-- in sync with the cursor as they move it. Edits that move the cursor
+	-- instead -- Backspace/Delete joining lines, typing a newline, pasting,
+	-- undo/redo -- don't, so without this the viewport can silently stop
+	-- containing the cursor: the screen keeps showing whatever it last
+	-- scrolled to while the cursor (and the edits happening at it) drift off
+	-- the top or bottom, invisible.
+	document:ensureTextCursorVisible(max_y - min_y + 1)
+
 	SetColour(Palette.P_FG, Palette.P_BG)
 	SetNormal()
 	ClearArea(lm, min_y, rm, max_y)

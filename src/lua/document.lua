@@ -98,6 +98,38 @@ function Document.moveTextLine(self, direction)
 	return true
 end
 
+-- Scrolls _texttop by whole logical lines, if needed, so the cursor's
+-- current line falls inside a `rows`-row-tall viewport starting at
+-- _texttop. moveTextLine (above) keeps _texttop in sync as it moves the
+-- cursor one line at a time, but edits that move the cursor by joining or
+-- splitting lines (Backspace/Delete across a line boundary, typing a
+-- newline, pasting, undo/redo) go through deleteTextRange/insert instead
+-- and don't -- so the redraw path calls this before drawing to reconcile
+-- the two, exactly like a navigation command would have.
+function Document.ensureTextCursorVisible(self, rows)
+	if not rows or rows < 1 then return end
+	local linestart = self:textLineBounds()
+	local top = self._texttop or 0
+	if linestart < top then
+		self._texttop = linestart
+	else
+		local offset, distance = top, 0
+		while offset < linestart do
+			local newline = self._textbuffer:find(offset, 10)
+			if not newline then break end
+			offset = newline + 1
+			distance = distance + 1
+		end
+		if distance < rows then return end
+		offset = top
+		for _ = 1, distance - rows + 1 do
+			offset = self._textbuffer:find(offset, 10) + 1
+		end
+		self._texttop = offset
+	end
+	self._texttopline = self:getLineAtPosition(self._texttop)
+end
+
 function Document.previousTextPosition(self, position)
 	position = position or self._textpos
 	if position == 0 then return nil end
