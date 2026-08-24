@@ -136,6 +136,7 @@ local ImportMenu = CreateMenu("Import new document",
 	E("FIodt",  "O", "Import ODT file...",        nil,         Cmd.ImportODTFile),
 	E("FIhtml", "B", "Import HTML file...",       nil,         Cmd.ImportHTMLFile),
 	E("FImd",   "M", "Import Markdown file...",   nil,         Cmd.ImportMarkdownFile),
+	E("FIws",   "W", "Import WordStar file...",   nil,         Cmd.ImportWordStarFile),
 	E("FItxt",  "T", "Import text file...",       nil,         Cmd.ImportTextFile),
 })
 

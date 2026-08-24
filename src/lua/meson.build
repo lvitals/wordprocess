@@ -40,6 +40,7 @@ wordprocess_lua_srcs = files(
   'import/text.lua',
   'import/opendocument.lua',
   'import/markdown.lua',
+  'import/wordstar.lua',
   'navigate.lua',
   'addons/goto.lua',
   'addons/autosave.lua',

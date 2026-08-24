@@ -5,6 +5,8 @@
 
 #include "globals.h"
 #include <sys/time.h>
+#include <iconv.h>
+#include <string.h>
 
 int getu8bytes(char c)
 {
@@ -202,6 +204,36 @@ static int transcode_cb(lua_State* L)
     return 1;
 }
 
+static int transcodefrom_cb(lua_State* L)
+{
+    size_t input_size;
+    const char* input = luaL_checklstring(L, 1, &input_size);
+    const char* encoding = luaL_checkstring(L, 2);
+    iconv_t converter = iconv_open("UTF-8", encoding);
+    if (converter == (iconv_t)-1)
+        return luaL_error(L, "unsupported source encoding '%s'", encoding);
+
+    size_t output_capacity = input_size * 4 + 1;
+    char* output = (char*)malloc(output_capacity);
+    char* output_position = output;
+    size_t output_remaining = output_capacity;
+    char* input_position = (char*)input;
+    size_t input_remaining = input_size;
+    if (iconv(converter, &input_position, &input_remaining,
+            &output_position, &output_remaining) == (size_t)-1)
+    {
+        int saved_errno = errno;
+        iconv_close(converter);
+        free(output);
+        return luaL_error(L, "cannot transcode from %s: %s",
+            encoding, strerror(saved_errno));
+    }
+    iconv_close(converter);
+    lua_pushlstring(L, output, output_position - output);
+    free(output);
+    return 1;
+}
+
 static int time_cb(lua_State* L)
 {
     struct timeval tv;
@@ -306,6 +338,7 @@ void utils_init(void)
         {"readu8",    readu8_cb   },
         {"writeu8",   writeu8_cb  },
         {"transcode", transcode_cb},
+        {"transcodefrom", transcodefrom_cb},
         {"time",      time_cb     },
         {"escape",    escape_cb   },
         {"unescape",  unescape_cb },

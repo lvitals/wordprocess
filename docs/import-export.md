@@ -5,6 +5,8 @@
 | Extension | Import | Export | Notes |
 | --- | :---: | :---: | --- |
 | `.wp` | Yes | Yes | Native document set; save/export includes the whole set |
+| `.wg` | Yes | No | Legacy WordGrinder document set; opened and upgraded natively |
+| `.ws` | Yes | No | WordStar document; imports paragraphs and character styles |
 | `.txt` | Yes | Yes | Plain UTF-8 text |
 | `.md` | Yes | Yes | Markdown through libcmark and native callbacks |
 | `.html` | Yes | Yes | Structural HTML with character styles |
@@ -30,8 +32,8 @@ wp --convert INPUT OUTPUT
 wp -c INPUT OUTPUT
 ```
 
-Types are selected strictly from the final extension and are case-sensitive.
-The input extensions are `wp`, `txt`, `md`, `html`, and `odt`; output also
+Types are selected from the final extension without regard to case.
+The input extensions are `wp`, `wg`, `ws`, `txt`, `md`, `html`, and `odt`; output also
 supports `org`, `tex`, and `tr`. Both paths must have an extension.
 
 A colon suffix selects or supplies a document name:
@@ -48,7 +50,11 @@ prints errors prefixed with `wp:`, and exits nonzero on failure.
 
 ## Fidelity
 
-Native saves preserve every WordProcess object. Other formats represent only
+Native saves preserve every WordProcess object. WordGrinder `.wg` files use
+the native legacy loaders and retain their document set, subdocuments, and
+styles. WordStar import decodes CP437, removes format metadata and dot commands,
+joins soft-wrapped lines, and maps headings plus bold, italic, and underline to
+WordProcess styles. Other formats represent only
 the current document and may not support every concept. Heading and list styles
 map naturally to semantic formats. Bold, italic, and underline are retained
 when the target supports them. Plain text discards formatting. `RAW` paragraphs

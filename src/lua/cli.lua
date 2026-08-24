@@ -14,6 +14,8 @@ local import_table =
 	["odt"] = Cmd.ImportODTFile,
 	["txt"] = Cmd.ImportTextFile,
 	["wp"] = Cmd.LoadDocumentSet,
+	["wg"] = Cmd.LoadDocumentSet,
+	["ws"] = Cmd.ImportWordStarFile,
 }
 
 local export_table =
@@ -75,13 +77,13 @@ function CliConvert(file1, file2)
 		assert(extension)
 		assert(hassubdoc)
 		assert(subdoc)
-		return root, extension, hassubdoc, subdoc
+		return root, extension:lower(), hassubdoc, subdoc, extension
 	end
 
-	local f1r, f1e, f1hs, f1s = decode_filename(file1)
-	local f1 = f1r.."."..f1e
-	local f2r, f2e, f2hs, _f2s = decode_filename(file2)
-	local f2 = f2r.."."..f2e
+	local f1r, f1e, f1hs, f1s, f1OriginalExtension = decode_filename(file1)
+	local f1 = f1r.."."..f1OriginalExtension
+	local f2r, f2e, f2hs, _f2s, f2OriginalExtension = decode_filename(file2)
+	local f2 = f2r.."."..f2OriginalExtension
 
 	if (f2hs ~= "") then
 		CLIError("you cannot specify a document name for the output file")
@@ -114,7 +116,7 @@ function CliConvert(file1, file2)
 	end
 
 	if (f1hs ~= "") then
-		if (f1e == "wp") then
+		if (f1e == "wp") or (f1e == "wg") then
 			-- If the user specified a document name, and we loaded a WordProcess file,
 			-- then select the specified document.
 

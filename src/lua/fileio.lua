@@ -22,6 +22,9 @@ local unpack = rawget(_G, "unpack") or table.unpack
 local MAGIC = "WordProcess dumpfile v1: this is not a text file!"
 local ZMAGIC = "WordProcess dumpfile v2: this is not a text file!"
 local TMAGIC = "WordProcess dumpfile v3: this is a text file; diff me!"
+local WORDGRINDER_MAGIC = "WordGrinder dumpfile v1: this is not a text file!"
+local WORDGRINDER_ZMAGIC = "WordGrinder dumpfile v2: this is not a text file!"
+local WORDGRINDER_TMAGIC = "WordGrinder dumpfile v3: this is a text file; diff me!"
 local DOCUMENT_MAGIC = "WordProcess document v1"
 
 local STOP = 0
@@ -789,11 +792,12 @@ function LoadFromString(filename, data)
 		return nil, ("'"..filename.."' is empty and is not a valid WordProcess file.")
 	end
 	local magic = firstline:gsub("\r", "")
-	if (magic == MAGIC) then
+	if (magic == MAGIC) or (magic == WORDGRINDER_MAGIC) then
 		loader = loadfromstream
-	elseif (magic == ZMAGIC) then
+	elseif (magic == ZMAGIC) or (magic == WORDGRINDER_ZMAGIC) then
 		loader = loadfromstreamz
-	elseif (magic == TMAGIC) or (magic == DOCUMENT_MAGIC) then
+	elseif (magic == TMAGIC) or (magic == WORDGRINDER_TMAGIC) or
+		(magic == DOCUMENT_MAGIC) then
 		loader = loadfromstreamt
 	else
 		fp:close()

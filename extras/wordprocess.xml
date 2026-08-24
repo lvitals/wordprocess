@@ -3,5 +3,6 @@
   <mime-type type="application/x-wordprocess">
     <comment>WordProcess document</comment>
     <glob pattern="*.wp"/>
+    <glob pattern="*.wg"/>
   </mime-type>
 </mime-info>
