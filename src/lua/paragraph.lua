@@ -16,6 +16,7 @@ local SetDim = wg.setdim
 local GetStringWidth = wg.getstringwidth
 local GetBytesOfCharacter = wg.getbytesofcharacter
 local GetWordText = wg.getwordtext
+local PrevCharInWord = wg.prevcharinword
 local BOLD = wg.BOLD
 local ITALIC = wg.ITALIC
 local UNDERLINE = wg.UNDERLINE
@@ -131,6 +132,73 @@ function Paragraph.wrap(self, width)
 			return finish
 		end
 
+		-- Counts whole characters in the half-open byte range
+		-- [from, upto). Fragment sizes are measured in characters, not
+		-- bytes, so a multi-byte UTF-8 letter (e.g. an accented
+		-- Portuguese vowel) still counts as one character rather than
+		-- inflating the fragment's apparent length -- and so stepping
+		-- back a "character" never lands mid-byte-sequence.
+		local function charcount(word, from, upto)
+			local count = 0
+			local i = from
+			while i < upto do
+				i = i + GetBytesOfCharacter(string.byte(word, i))
+				count = count + 1
+			end
+			return count
+		end
+
+		-- Breaks `word` from byte `start` to its end into successive
+		-- fragments no wider than `contentwidth`, appending one line per
+		-- fragment. Used both for a word too wide for a whole fresh line
+		-- and for the remainder of a word that already used a hyphen at
+		-- the end of a partial line. Mirrors the orphan-avoidance rule
+		-- above: the final fragment never ends up a single dangling
+		-- character, because characters are borrowed back from the
+		-- previous fragment instead, for as long as the word is long
+		-- enough to allow it.
+		local function emitwordfragments(wn, word, start, contentwidth, hyphenate)
+			local minfragmentchars = 2
+			local fragments = {}
+			while start <= #word do
+				local finish = fragmentend(word, start, contentwidth)
+				fragments[#fragments+1] = {start = start, finish = finish}
+				start = finish
+			end
+
+			if hyphenate then
+				local last = fragments[#fragments]
+				local previous = fragments[#fragments - 1]
+				while previous and
+					(charcount(word, last.start, last.finish) < minfragmentchars) and
+					(charcount(word, previous.start, previous.finish) > minfragmentchars) do
+					local boundary = PrevCharInWord(word, previous.finish)
+					if not boundary or boundary <= previous.start then break end
+					previous.finish = boundary
+					last.start = boundary
+				end
+			end
+
+			-- Every fragment except the last is a forced break: the word
+			-- keeps going, so that line can hold nothing else. The last
+			-- fragment is different -- it is simply where the word ends -- so
+			-- it is handed back to the caller instead of being committed as
+			-- its own line. That lets it open a fresh line which further
+			-- words can still pack onto normally, instead of the remainder of
+			-- a hyphenated word always claiming a whole line to itself.
+			for i = 1, #fragments - 1 do
+				local fragment = fragments[i]
+				local fragmentline = { wn = wn, wn }
+				fragmentline.fragment = {
+					start = fragment.start,
+					finish = fragment.finish,
+					hyphen = hyphenate,
+				}
+				lines[#lines+1] = fragmentline
+			end
+			return fragments[#fragments]
+		end
+
 		for wn, word in ipairs(self) do
 			-- get width of word (including space)
 			local ww = GetStringWidth(word) + 1
@@ -147,15 +215,47 @@ function Paragraph.wrap(self, width)
 				(ww - 1) <= remaining
 			local splitatend = hyphenate and (#line > 0) and
 				((ww - 1) >= remaining) and (remaining >= 2)
-			-- Punctuation adjoining a word is one wrapping unit. If the complete
-			-- unit fits on a fresh line, move it there instead of manufacturing a
-			-- visual hyphen and leaving punctuation on the continuation line.
-			if splitatend and hasTrailingPunctuation and (ww - 1) <= available then
+			-- Punctuation adjoining a word is one wrapping unit. If it already
+			-- fits in the room left on this line, prefer that untouched over
+			-- manufacturing a visual hyphen (this also covers the boundary
+			-- case where the word fills the line exactly, with no room left
+			-- to reserve for the usual trailing separator). Otherwise a
+			-- hyphenated split is not "orphaning the punctuation": it always
+			-- travels with whichever fragment holds the end of the word, so
+			-- the same minimum-fragment rule that governs any other word
+			-- applies here too, instead of always moving the whole unit to a
+			-- fresh line regardless of how much room that wastes.
+			if splitatend and hasTrailingPunctuation and punctuatedUnitFits then
 				splitatend = false
 			end
 
+			local splitfinish
 			if splitatend then
+				-- Never hyphenate so close to either edge of the word that a
+				-- single orphan letter is left dangling alone on its own line
+				-- (e.g. "pode-" / "m"). Shrink the fragment, without ever
+				-- growing it past what fits, until both sides meet the
+				-- minimum; if the word is too short for that, give up and let
+				-- the whole word move to a fresh line instead.
+				local minfragmentchars = 2
 				local finish = fragmentend(word, 1, remaining - 1)
+				while (finish > 1) and
+					(charcount(word, 1, finish) > minfragmentchars) and
+					(charcount(word, finish, #word + 1) < minfragmentchars) do
+					local boundary = PrevCharInWord(word, finish)
+					if not boundary then break end
+					finish = boundary
+				end
+				if (charcount(word, 1, finish) < minfragmentchars) or
+					(charcount(word, finish, #word + 1) < minfragmentchars) then
+					splitatend = false
+				else
+					splitfinish = finish
+				end
+			end
+
+			if splitatend then
+				local finish = splitfinish
 				xs[wn] = w
 				line[#line+1] = wn
 				line.trailingfragment = {
@@ -166,21 +266,20 @@ function Paragraph.wrap(self, width)
 					width = width + self:getIndentOfLine(1) - self:getIndentOfLine(2)
 				end
 
-				local start = finish
-				while start <= #word do
-					local contentlimit = math.max(width - 1, 1)
-					finish = fragmentend(word, start, contentlimit)
-					local continued = finish <= #word
-					local fragmentline = { wn = wn, wn }
-					fragmentline.fragment = {
-						start = start, finish = finish,
-						hyphen = continued,
-					}
-					lines[#lines+1] = fragmentline
-					start = finish
-				end
-				line = {wn = wn + 1}
-				w = 0
+				local contentlimit = math.max(width - 1, 1)
+				local tail = emitwordfragments(wn, word, finish, contentlimit, true)
+				-- The word's own remainder opens the next line instead of
+				-- claiming it outright: subsequent words still pack onto it
+				-- normally, exactly as they would after any other short word.
+				-- Deliberately not xs[wn]: wn is the same word that also owns the
+				-- trailing fragment on the previous line, and xs[] has only one
+				-- slot per word. Consumers detect line.leadingfragment instead and
+				-- treat this word as starting at column 0, the same way they
+				-- already do for line.fragment.
+				line = { wn = wn, wn, leadingfragment = {
+					start = tail.start, finish = tail.finish, hyphen = false,
+				} }
+				w = GetStringWidth(word:sub(tail.start, tail.finish - 1)) + 1
 			elseif (ww - 1) > available then
 				if #line > 0 then
 					lines[#lines+1] = line
@@ -189,26 +288,18 @@ function Paragraph.wrap(self, width)
 					end
 				end
 
-				local start = 1
-				while start <= #word do
-					local limit = math.max(width, 1)
-					local contentlimit = math.max(limit - (hyphenate and 1 or 0), 1)
-					local finish = fragmentend(word, start, contentlimit)
+				local limit = math.max(width, 1)
+				local contentlimit = math.max(limit - (hyphenate and 1 or 0), 1)
+				local tail = emitwordfragments(wn, word, 1, contentlimit, hyphenate)
 
-					local continued = finish <= #word
-					local fragmentline = { wn = wn, wn }
-					fragmentline.fragment = {
-						start = start,
-						finish = finish,
-						hyphen = continued and hyphenate,
-					}
-					lines[#lines+1] = fragmentline
-					start = finish
-				end
-
-				line = {wn = wn + 1}
-				w = 0
-				xs[wn] = 0
+				-- As above: the word's own remainder opens the next line
+				-- instead of claiming it outright.
+				-- See the comment in the splitatend branch above: xs[] is
+				-- deliberately left untouched for this word.
+				line = { wn = wn, wn, leadingfragment = {
+					start = tail.start, finish = tail.finish, hyphen = false,
+				} }
+				w = GetStringWidth(word:sub(tail.start, tail.finish - 1)) + 1
 			else
 				-- add an extra space if the user asked for it
 				if fullstopspaces and word:find("%.$") then
@@ -256,17 +347,19 @@ function Paragraph.renderLine(self, line, x, y)
 	local wd = self._wrapdata
 	assert(wd)
 
-	for _, wn in ipairs(line) do
+	for i, wn in ipairs(line) do
 		local spellingWord = self[wn]
 		local w = spellingWord
 		local wordx = wd.xs[wn]
 		local fragment = line.fragment
 		if line.trailingfragment and wn == line[#line] then
 			fragment = line.trailingfragment
+		elseif line.leadingfragment and i == 1 then
+			fragment = line.leadingfragment
 		end
 		if fragment then
 			w = w:sub(fragment.start, fragment.finish - 1)
-			if line.fragment then
+			if line.fragment or (line.leadingfragment and i == 1) then
 				wordx = 0
 			end
 			if fragment.hyphen then
@@ -350,12 +443,16 @@ function Paragraph.renderMarkedLine(self, line, x, y, width, pn)
 		local fragment = line.fragment
 		if line.trailingfragment and w == line[#line] then
 			fragment = line.trailingfragment
+		elseif line.leadingfragment and w == line[1] then
+			fragment = line.leadingfragment
 		end
 		if fragment then
 			local fs = fragment.start
 			local fe = fragment.finish
 			word = word:sub(fs, fe - 1)
-			wordx = 0
+			if line.fragment or (line.leadingfragment and w == line[1]) then
+				wordx = 0
+			end
 
 			-- Selection offsets refer to the complete stored word. Translate
 			-- them into this visual fragment; a mouse click temporarily enables
@@ -405,6 +502,8 @@ function Paragraph.getLineOfWord(self, wn, co)
 		local fragment = l.fragment
 		if l.trailingfragment and l[#l] == wn then
 			fragment = l.trailingfragment
+		elseif l.leadingfragment and l[1] == wn then
+			fragment = l.leadingfragment
 		end
 		if fragment and ((l[1] == wn) or (l[#l] == wn)) then
 			-- fragment.finish is the first byte belonging to the next
@@ -454,10 +553,12 @@ function Paragraph.getXOffsetOfWord(self, wn, co)
 	local fragment = line.fragment
 	if line.trailingfragment and line[#line] == wn then
 		fragment = line.trailingfragment
+	elseif line.leadingfragment and line[1] == wn then
+		fragment = line.leadingfragment
 	end
 	if fragment then
 		local prefixwidth = GetStringWidth(self[wn]:sub(1, fragment.start - 1))
-		if line.fragment then
+		if line.fragment or (line.leadingfragment and line[1] == wn) then
 			x = -prefixwidth
 		else
 			x = x - prefixwidth

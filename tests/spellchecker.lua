@@ -32,12 +32,13 @@ AssertEquals("legacy-saved-selection", GlobalSettings.systemdictionary.filename)
 AssertEquals(true, GlobalSettings.systemdictionary.custom)
 GlobalSettings.systemdictionary.filename = nil
 
--- Dictionaries are searched directly through the mapped large-file backend
--- without assuming an order. Exercise present words, misses and an EOF without
--- a trailing newline.
-local mappedDictionaryPath = wg.mkdtemp().."/unordered.words"
+-- Dictionaries are required to be sorted (see docs/hunspell-wordlists.md),
+-- which lets lookups binary-search the mapped large-file backend instead of
+-- loading or indexing the entire file. Exercise present words, misses and an
+-- EOF without a trailing newline.
+local mappedDictionaryPath = wg.mkdtemp().."/sorted.words"
 AssertEquals(nil, select(2, wg.writefile(mappedDictionaryPath,
-	"omega\nalpha\nmundo")))
+	"alpha\nmundo\nomega")))
 GlobalSettings.systemdictionary = {filename=mappedDictionaryPath, custom=true}
 GlobalSettings.spellchecker.enabled = true
 GlobalSettings.spellchecker.usesystemdictionary = true
@@ -50,21 +51,31 @@ AssertEquals(true, IsWordMisspelt("aardvark", false))
 AssertEquals(true, IsWordMisspelt("beta", false))
 AssertEquals(true, IsWordMisspelt("zeta", false))
 AssertEquals("mapped", GetSystemDictionary().kind)
-AssertEquals(true, #GetSystemDictionary().pages > 0)
 ResetSystemDictionaryCache()
 
--- A word beyond the first dictionary page remains available without loading
--- the complete word list into a Lua table.
-local pagedDictionaryPath = wg.mkdtemp().."/paged.words"
-local linesPerPageExercise = 10000
-AssertEquals(nil, select(2, wg.writefile(pagedDictionaryPath,
-	string.rep("padding\n", linesPerPageExercise).."needle\n")))
+-- A word far from the start of a large dictionary remains available without
+-- loading or indexing the complete word list, and lookups stay fast
+-- regardless of dictionary size: this line count would take a very long time
+-- to index up front, so the test itself times out if that ever regresses.
+local largeDictionaryPath = wg.mkdtemp().."/large.words"
+local paddingLines = 200000
+local paddingContent = {}
+for i = 1, paddingLines do
+	paddingContent[i] = string.format("filler%06d", i)
+end
+AssertEquals(nil, select(2, wg.writefile(largeDictionaryPath,
+	table.concat(paddingContent, "\n").."\nneedle\n")))
 GlobalSettings.systemdictionary = {
-	filenames={pagedDictionaryPath}, custom=true,
+	filenames={largeDictionaryPath}, custom=true,
 }
 ResetSystemDictionaryCache()
+local searchStart = os.clock()
 AssertEquals(false, IsWordMisspelt("needle", false))
-AssertEquals(true, #GetSystemDictionary().pages > 1)
+AssertEquals(false, IsWordMisspelt("filler000001", false))
+AssertEquals(false, IsWordMisspelt("filler199999", false))
+AssertEquals(true, IsWordMisspelt("missingword", false))
+local searchDuration = os.clock() - searchStart
+AssertEquals(true, searchDuration < 2.0)
 ResetSystemDictionaryCache()
 
 -- More than one selected word list is searched. A word is accepted when it

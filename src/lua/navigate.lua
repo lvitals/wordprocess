@@ -702,7 +702,13 @@ function Cmd.GotoXPosition(pos, targetline)
 	end
 
 	while (wordofline > 0) do
-		if (wd.xs[line[wordofline]] <= pos) then
+		-- A word that only opens a line via a leading fragment (or a pure
+		-- mid-word forced fragment) has no xs[] entry of its own -- the same
+		-- word also owns a fragment on another line, so xs[] can't hold two
+		-- positions for it. It always starts at column 0 wherever it does
+		-- appear without one, exactly like the forced-fragment lines that
+		-- never wrote xs[] to begin with.
+		if ((wd.xs[line[wordofline]] or 0) <= pos) then
 			break
 		end
 		wordofline = wordofline - 1
@@ -719,9 +725,11 @@ function Cmd.GotoXPosition(pos, targetline)
 	local fragmentdata = line.fragment
 	if line.trailingfragment and wn == line[#line] then
 		fragmentdata = line.trailingfragment
+	elseif line.leadingfragment and wn == line[1] then
+		fragmentdata = line.leadingfragment
 	end
 	if fragmentdata then
-		if line.fragment then
+		if line.fragment or (line.leadingfragment and wn == line[1]) then
 			wordx = 0
 		end
 		local fragment = word:sub(fragmentdata.start, fragmentdata.finish - 1)

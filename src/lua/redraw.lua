@@ -330,7 +330,7 @@ local function drawtopmarker(y)
 			local ln = paragraph:getLineOfWord(
 				currentDocument.cw, currentDocument.co)
 			local line = wd.lines[ln]
-			if line and not line.fragment then
+			if line and not line.fragment and not line.leadingfragment then
 				for _, wn in ipairs(line) do
 					if WordHasTabMarker(paragraph[wn]) then
 						local stop = lm + (wd.xs[wn] or 0) +

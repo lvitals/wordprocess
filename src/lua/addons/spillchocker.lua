@@ -9,12 +9,10 @@ local ChDir = wg.chdir
 
 local USER_DICTIONARY_NAME = "User dictionary"
 local MAX_CACHED_DICTIONARY_LOOKUPS = 4096
--- Match the project's normal streaming block size: pages remain small enough
--- for redraw-time reads while amortising text-buffer calls on large lists.
-local DICTIONARY_PAGE_BYTES = 64 * 1024
--- Two leading bytes sharply reduce candidate pages, including for UTF-8 words,
--- while keeping the per-page index bounded and cheap to construct.
-local DICTIONARY_INDEX_PREFIX_BYTES = 2
+local NEWLINE_BYTE = 10
+-- No legitimate dictionary word list line is remotely this long; it just
+-- bounds the read if a candidate line turns out to be corrupt or binary.
+local MAX_DICTIONARY_LINE_BYTES = 4096
 local user_dictionary_cache
 local system_dictionary_cache
 local composition_cache = {}
@@ -214,39 +212,31 @@ local function mapped_dictionary_contains(dictionary, word)
 	local cached = dictionary.results[word]
 	if cached ~= nil then return cached end
 
+	-- The dictionary file is required to be sorted (see
+	-- docs/hunspell-wordlists.md), so the word can be located with a binary
+	-- search over line boundaries instead of loading or indexing the whole
+	-- file. Each step reads at most one short candidate line.
 	local buffer = dictionary.buffer
-	if not dictionary.pages then
-		dictionary.pages = {}
-		local size = buffer:size()
-		local start = 0
-		while start < size do
-			local nominalEnd = math.min(size, start + DICTIONARY_PAGE_BYTES)
-			local newline = nominalEnd < size and
-				buffer:find(nominalEnd, 10, size) or nil
-			local finish = newline and (newline + 1) or size
-			local text = buffer:slice(start, finish - start)
-			local prefixes = {}
-			for line in text:gmatch("[^\r\n]+") do
-				prefixes[line:sub(1, DICTIONARY_INDEX_PREFIX_BYTES)] = true
-			end
-			dictionary.pages[#dictionary.pages+1] = {
-				start = start, finish = finish, prefixes = prefixes,
-			}
-			start = finish
-		end
-	end
-
+	local lo, hi = 0, buffer:size()
 	local found = false
-	local prefix = word:sub(1, DICTIONARY_INDEX_PREFIX_BYTES)
-	for _, page in ipairs(dictionary.pages) do
-		if page.prefixes[prefix] then
-			local text = "\n" .. buffer:slice(page.start,
-				page.finish - page.start) .. "\n"
-			if text:find("\n" .. word .. "\n", 1, true) or
-				text:find("\n" .. word .. "\r\n", 1, true) then
-				found = true
-				break
-			end
+	while lo < hi do
+		local mid = lo + (hi - lo) // 2
+		local previousnewline = buffer:rfind(0, NEWLINE_BYTE, mid)
+		local linestart = previousnewline and (previousnewline + 1) or 0
+		local lineend = buffer:find(linestart, NEWLINE_BYTE, hi) or hi
+		local line = buffer:slice(linestart,
+			math.min(lineend - linestart, MAX_DICTIONARY_LINE_BYTES))
+		if line:sub(-1) == "\r" then
+			line = line:sub(1, -2)
+		end
+
+		if line == word then
+			found = true
+			break
+		elseif line < word then
+			lo = lineend + 1
+		else
+			hi = linestart
 		end
 	end
 

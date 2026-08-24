@@ -126,7 +126,8 @@ end
 
 local function linetarget(lines, pn, line)
 	local data = lines[line]
-	local offset = data.fragment and data.fragment.start or 1
+	local offset = (data.fragment and data.fragment.start) or
+		(data.leadingfragment and data.leadingfragment.start) or 1
 	return {p=pn, line=line, w=data.wn or data[1] or 1, o=offset}
 end
 
@@ -206,6 +207,8 @@ function GetDocumentPageAtPosition(document, index, position)
 		local found = false
 		if data.fragment and data.wn == w then
 			found = o >= data.fragment.start and o <= data.fragment.finish
+		elseif data.leadingfragment and data[1] == w then
+			found = o >= data.leadingfragment.start and o <= data.leadingfragment.finish
 		else
 			for _, word in ipairs(data) do if word == w then found = true; break end end
 		end
