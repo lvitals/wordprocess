@@ -34,9 +34,3 @@ do
 	AddEventListener("RegisterAddons", cb)
 end
 
------------------------------------------------------------------------------
--- Configuration user interface.
-
-function Cmd.ConfigurePageCount()
-	return Cmd.ConfigurePageLayout()
-end
