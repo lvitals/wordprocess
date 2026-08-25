@@ -240,8 +240,15 @@ static short lookup_colour(const colour_t* colour)
         double dr = standard_palette[i].r - colour->r;
         double dg = standard_palette[i].g - colour->g;
         double db = standard_palette[i].b - colour->b;
-        // Standard weighted Euclidean perceptual distance
-        double dist = 0.299 * dr * dr + 0.587 * dg * dg + 0.114 * db * db;
+        double rmean = (standard_palette[i].r + colour->r) / 2.0;
+        // "redmean" weighted Euclidean distance. Plain luma weights
+        // (0.299/0.587/0.114) are meant for computing perceived
+        // brightness, not for nearest-colour matching -- their tiny blue
+        // weight means a neutral grey and a saturated yellow can come out
+        // "closer" than a grey and a paler grey, which is exactly wrong
+        // on the sparse 8/16-colour palettes native terminals offer.
+        double dist = (2.0 + rmean) * dr * dr + 4.0 * dg * dg +
+            (3.0 - rmean) * db * db;
         if (dist < best_dist)
         {
             best_dist = dist;

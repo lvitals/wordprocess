@@ -43,6 +43,18 @@ int main(int argc, char* argv[])
 #else
     setlocale(LC_ALL, "C.UTF-8");
     enable_unicode = strcmp(nl_langinfo(CODESET), "UTF-8") == 0;
+
+    /* The above forces a UTF-8 codeset regardless of what the terminal
+     * actually is, so it can't tell the native Linux virtual console
+     * apart from a real UTF-8-capable emulator. The console's font
+     * generally lacks the box-drawing/block glyphs WordProcess uses for
+     * unicode rendering, so force the ASCII fallback there. TERM=linux is
+     * the standard terminfo entry for that console. */
+    {
+        const char* term = getenv("TERM");
+        if (term && (strcmp(term, "linux") == 0))
+            enable_unicode = false;
+    }
 #endif
 
     script_init();

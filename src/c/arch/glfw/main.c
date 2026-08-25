@@ -257,8 +257,16 @@ static void handle_mouse(double x, double y, bool b)
     if (wh > 0)
         y = y * fh / wh;
 
+    /* The grid is anchored to the bottom of the framebuffer (see dpy_sync),
+     * so row 0 doesn't necessarily start at y=0 -- there can be a leftover
+     * margin above it when fh isn't an exact multiple of fontHeight. Undo
+     * that same offset here, or clicks on the status bar (and everything
+     * else) would land one row off whenever such a margin exists. */
+    int yOffset = fh % fontHeight;
     int ix = x / fontWidth;
-    int iy = y / fontHeight;
+    int iy = ((int)y - yOffset) / fontHeight;
+    if ((int)y < yOffset)
+        iy = -1;
     static int oldix = -1;
     static int oldiy = -1;
     static bool oldb = false;
@@ -422,10 +430,22 @@ void dpy_sync(void)
     }
     else
     {
+        /* screenHeight is floor(h/fontHeight): h generally isn't an exact
+         * multiple of fontHeight, so there are 0..fontHeight-1 leftover
+         * pixels that don't fit a whole row. Anchoring row 0 at y=0 would
+         * push that leftover below the last row (the status bar), whose
+         * apparent thickness would then change with every resize as the
+         * leftover grows and shrinks. Anchoring to the bottom instead
+         * keeps every row, including the status bar, at exactly
+         * fontHeight regardless of window size -- the leftover always
+         * lands above row 0, in the ordinary document background, where
+         * a few pixels of slack isn't a visible "bar" changing size. */
+        int yOffset = h - screenHeight * fontHeight;
+
         const cell_t* p = &screen[0];
         for (int y = 0; y < screenHeight; y++)
         {
-            float sy = y * fontHeight;
+            float sy = yOffset + y * fontHeight;
             for (int x = 0; x < screenWidth; x++)
             {
                 float sx = x * fontWidth;
@@ -439,7 +459,7 @@ void dpy_sync(void)
             int x = cursorx * fontWidth - 1;
             if (x < 0)
                 x = 0;
-            int y = cursory * fontHeight;
+            int y = yOffset + cursory * fontHeight;
 
             glColor3f(1.0f, 1.0f, 1.0f);
             glLogicOp(GL_XOR);

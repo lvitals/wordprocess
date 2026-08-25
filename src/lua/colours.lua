@@ -13,7 +13,12 @@ local function MakeDark()
 	local paper = {0.122, 0.122, 0.122}        -- #1f1f1f
 	local headerfg = {0.337, 0.612, 0.839}     -- #569cd6
 	local headerbg = {0.169, 0.176, 0.180}     -- #2b2d2e
-	local statusbg = {0.000, 0.478, 0.800}     -- #007acc
+	-- Neutral terminal-style black/grey rather than an RGB accent colour,
+	-- so it renders correctly (not as a mismatched blue/cyan) on the
+	-- native Linux console and other limited-colour terminals, where it
+	-- snaps straight onto the standard ANSI black and light-grey entries.
+	local statusbg = {0.000, 0.000, 0.000}     -- #000000 (ANSI black)
+	local statusfg = {0.753, 0.753, 0.753}     -- #c0c0c0 (ANSI light grey)
 
 	return {
 		Desktop      = {0.094, 0.094, 0.094}, -- #181818
@@ -23,9 +28,9 @@ local function MakeDark()
 		ScrollbarFG  = {0.776, 0.776, 0.776}, -- #c6c6c6
 		ScrollbarBG  = {0.094, 0.094, 0.094}, -- #181818
 		StatusbarBG  = statusbg,
-		StatusbarFG  = {1.000, 1.000, 1.000},
+		StatusbarFG  = statusfg,
 		MessageBG    = statusbg,
-		MessageFG    = {1.000, 1.000, 1.000},
+		MessageFG    = statusfg,
 		StyleFG      = {0.522, 0.522, 0.522}, -- #858585
 		ControlFG    = ink,
 		ControlBG    = {0.094, 0.094, 0.094}, -- #181818
