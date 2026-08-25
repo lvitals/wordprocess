@@ -454,6 +454,27 @@ void dpy_sync(void)
             }
         }
 
+        /* yOffset pixels above row 0 aren't part of any cell, so they'd
+         * otherwise stay whatever glClearColor() left them -- a fixed
+         * black, regardless of theme. That's invisible against the Dark
+         * theme's near-black desktop but shows up as a stray black line
+         * across the top of the window against the Light theme's paler
+         * one. Paint it using row 0's own per-column background instead,
+         * so it reads as more of the same desktop rather than a seam. */
+        if (yOffset > 0)
+        {
+            const cell_t* firstRow = &screen[0];
+            glDisable(GL_BLEND);
+            for (int x = 0; x < screenWidth; x++)
+            {
+                float sx = x * fontWidth;
+                const GLfloat* bg = (const GLfloat*)&firstRow[x].bg;
+                const GLfloat* fg = (const GLfloat*)&firstRow[x].fg;
+                glColor3fv((firstRow[x].attr & DPY_REVERSE) ? fg : bg);
+                glRectf(sx, 0, sx + fontWidth, yOffset);
+            }
+        }
+
         if (cursorShown)
         {
             int x = cursorx * fontWidth - 1;

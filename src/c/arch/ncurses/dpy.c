@@ -130,12 +130,33 @@ void dpy_start(void)
     if (use_colours)
         start_color();
 
+    /* idlok's hardware insert/delete-*line* optimisation makes ncurses
+     * physically shift terminal lines on scroll (via IL/DL or a scroll
+     * region) instead of rewriting them; idcok does the same thing
+     * horizontally, shifting characters within a line via ICH/DCH (e.g.
+     * when the amount of text before the scrollbar column changes from
+     * one redraw to the next, which happens on practically every
+     * scroll). Both are only safe when the terminal guarantees a newly-
+     * exposed cell inherits the currently-set background colour (the
+     * back_color_erase/"bce" capability) -- otherwise the cell comes
+     * back in whatever background the terminal last had active, ncurses'
+     * change-diff believes the (merely moved) content is still correct
+     * and never repaints it, and the mismatch is left on screen -- the
+     * colour bands seen scrolling, and the stale stripes right at the
+     * scrollbar column, under TERM=ansi, which doesn't advertise bce
+     * (unlike TERM=linux or xterm, which do and keep the fast path).
+     * This is a capability check, not a TERM-string special case: any
+     * terminal missing bce gets the same conservative, fully-rewritten
+     * redraw. Only relevant when colours are in play at all -- without
+     * them there's no background to mismatch. */
+    bool bce_safe = !use_colours || (tigetflag((char*)"bce") == 1);
+    idlok(stdscr, bce_safe);
+    idcok(stdscr, bce_safe);
+
     raw();
     noecho();
     meta(NULL, TRUE);
     nonl();
-    idlok(stdscr, TRUE);
-    idcok(stdscr, TRUE);
     scrollok(stdscr, FALSE);
     intrflush(stdscr, FALSE);
     // notimeout(stdscr, TRUE);
@@ -222,6 +243,63 @@ void dpy_setattr(int andmask, int ormask)
     update_attrs();
 }
 
+/* Whether to use the deterministic black/white colour strategy below
+ * instead of nearest-RGB matching. This is a colour-capability question,
+ * entirely independent of the enable_unicode glyph-capability check in
+ * main.c: a terminal can be in a UTF-8 locale (affecting glyphs) while
+ * still only offering an 8/16-colour palette (affecting colour), and the
+ * two must not be conflated.
+ *
+ * Gated on the palette size alone (COLORS), not on any particular TERM
+ * string -- this originally only covered TERM=linux, but the underlying
+ * problem (nearest-RGB matching being unreliable once the palette is
+ * this sparse) is exactly the same under TERM=ansi, or any other
+ * terminal that only advertises 8/16 colours, so there's nothing
+ * Linux-console-specific to key off. */
+static bool use_restricted_palette_colours(void)
+{
+    return COLORS <= 16;
+}
+
+static double luma_of(const colour_t* c)
+{
+    return 0.299 * c->r + 0.587 * c->g + 0.114 * c->b;
+}
+
+/* On a full-colour terminal, nearest-RGB matching (lookup_colour, above)
+ * reproduces a theme faithfully. On an 8/16-colour palette it doesn't: a
+ * background's exact hue can snap to a saturated ANSI colour (yellow,
+ * cyan) that has nothing to do with the theme, and nearest-matching fg
+ * and bg independently gives no guarantee they land on opposite ends of
+ * the palette, so text can end up low-contrast or unreadable against its
+ * own background.
+ *
+ * Instead, classify the background alone as light or dark by its own
+ * luminance, using only COLOR_BLACK/COLOR_WHITE -- the two colours
+ * guaranteed present on any curses-capable terminal -- and force the
+ * foreground to the opposite tier, ignoring its own hue entirely. Every
+ * pair then gets maximum, predictable contrast regardless of the theme's
+ * exact colours, which is what distinguishes a light theme (light
+ * paper/dark chrome background pairs) from a dark one (the reverse) even
+ * when no single RGB value survives the trip. */
+static void restricted_palette_colours(const colour_t* bg, short* fgc, short* bgc)
+{
+    /* The split sits below the arithmetic midpoint (0.5) rather than at
+     * it. A theme's "desktop" background is typically a middling grey --
+     * meant to read as a neutral surface the paper sits on, not as dark
+     * chrome -- and can land just on the dark side of an exact 50% split
+     * by a hair (e.g. the Light theme's desktop is ~0.50 luma) even
+     * though it's designed to look closer to the paper than to the
+     * black/near-black tones (well under 0.3) actually used for chrome
+     * like the status bar. 0.4 keeps every such background on the
+     * correct side (verified against every theme's desktop, paragraph,
+     * and status colours) while still requiring a real, clearly-dark
+     * colour to be classified as dark. */
+    bool bg_dark = luma_of(bg) < 0.4;
+    *bgc = bg_dark ? COLOR_BLACK : COLOR_WHITE;
+    *fgc = bg_dark ? COLOR_WHITE : COLOR_BLACK;
+}
+
 static short lookup_colour(const colour_t* colour)
 {
     init_standard_palette();
@@ -263,8 +341,14 @@ void dpy_setcolour(const colour_t* fg, const colour_t* bg)
     if (!use_colours)
         return;
 
-    short fgc = lookup_colour(fg);
-    short bgc = lookup_colour(bg);
+    short fgc, bgc;
+    if (use_restricted_palette_colours())
+        restricted_palette_colours(bg, &fgc, &bgc);
+    else
+    {
+        fgc = lookup_colour(fg);
+        bgc = lookup_colour(bg);
+    }
 
     for (int i = 0; i < arrlen(colourPairs); i++)
     {
