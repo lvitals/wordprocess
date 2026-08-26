@@ -32,7 +32,7 @@ the selected frontend's event loop.
 
 ## Build system
 
-Meson generates an embedded Lua table with `tools/meson-multibin2c.py` and,
+Meson generates an embedded Lua table with `tools/meson-multibin2c.c` and,
 for `xwp`, font and icon sources. Build options are `xwp`, `app_version`, and
 `lua_version`, `dictionary_dir`, and `dictionary_path`. The build detects stb headers in `/usr/include/stb` or
 `/usr/local/include/stb`. The native format constant is currently 8.

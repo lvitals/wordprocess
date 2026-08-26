@@ -100,6 +100,7 @@ if stb_dir == ''
 endif
 stb_inc = include_directories(stb_dir, is_system: true)
 
+subdir('tools')
 subdir('src/lua')
 subdir('src/c')
 subdir('src/c/arch/ncurses')
