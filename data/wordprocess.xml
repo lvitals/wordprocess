@@ -2,7 +2,15 @@
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
   <mime-type type="application/x-wordprocess">
     <comment>WordProcess document</comment>
-    <glob pattern="*.wp"/>
+    <!-- *.wp is also claimed (at the default weight 50) by the freedesktop.org
+         WordPerfect entry (application/vnd.wordperfect); a higher weight here
+         is what makes shared-mime-info resolve a *.wp file to WordProcess
+         instead, since our files never match WordPerfect's own content magic. -->
+    <glob pattern="*.wp" weight="60"/>
     <glob pattern="*.wg"/>
+    <!-- Used by icon themes that don't inherit from hicolor (where the real
+         application-x-wordprocess icon lives, installed by data/meson.build)
+         and so wouldn't otherwise find any icon for this mimetype at all. -->
+    <generic-icon name="x-office-document"/>
   </mime-type>
 </mime-info>
