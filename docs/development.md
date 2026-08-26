@@ -28,7 +28,7 @@ the selected frontend's event loop.
 | `tests/` | Lua functional/regression suite |
 | `testdocs/` | Native compatibility and ODT fixtures |
 | `scripts/` | Automation and diagnostic Lua scripts |
-| `extras/` | Desktop integration, MIME type, fonts, icon, dictionaries |
+| `data/` | Desktop integration, MIME type, fonts, icon (`icons/`), dictionaries |
 
 ## Build system
 

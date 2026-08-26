@@ -106,5 +106,5 @@ subdir('src/c/arch/ncurses')
 if build_xwp
   subdir('src/c/arch/glfw')
 endif
-subdir('extras')
+subdir('data')
 subdir('tests')

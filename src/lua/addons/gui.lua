@@ -10,10 +10,10 @@ local DEFAULT_GUI_SETTINGS = {
 	font_size = 20,
 	window_width = 800,
 	window_height = 600,
-	font_regular = "extras/fonts/FantasqueSansMono-Regular.ttf",
-	font_italic = "extras/fonts/FantasqueSansMono-Italic.ttf",
-	font_bold = "extras/fonts/FantasqueSansMono-Bold.ttf",
-	font_bolditalic = "extras/fonts/FantasqueSansMono-BoldItalic.ttf",
+	font_regular = "data/fonts/FantasqueSansMono-Regular.ttf",
+	font_italic = "data/fonts/FantasqueSansMono-Italic.ttf",
+	font_bold = "data/fonts/FantasqueSansMono-Bold.ttf",
+	font_bolditalic = "data/fonts/FantasqueSansMono-BoldItalic.ttf",
 }
 
 do

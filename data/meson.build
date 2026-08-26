@@ -26,10 +26,21 @@ install_data('wordprocess.desktop',
   install_dir: get_option('datadir') / 'applications',
 )
 
-install_data('wordprocess.svg',
+install_data('icons/wordprocess.svg',
   install_dir: get_option('datadir') / 'icons/hicolor/scalable/apps',
 )
 
 install_data('wordprocess.xml',
   install_dir: get_option('datadir') / 'mime/packages',
 )
+
+# Without this, a freshly installed .desktop/icon won't show up (or won't
+# show the icon) in the application menu until something else happens to
+# invalidate the icon theme and desktop file caches -- refresh them as
+# part of `meson install`, on any desktop environment that ships these.
+if find_program('gtk-update-icon-cache', required: false).found() or find_program('update-desktop-database', required: false).found()
+  update_desktop_caches = executable('update-desktop-caches', 'update-desktop-caches.c',
+    native: true,
+  )
+  meson.add_install_script(update_desktop_caches, get_option('datadir'))
+endif

@@ -4,10 +4,10 @@ opengl_dep = dependency('opengl')
 # Embeds the 4 bundled TTF fonts into font_table.h, same mechanism as
 # src/lua/meson.build's script_table.h.
 font_table_srcs = files(
-  '../../../../extras/fonts/FantasqueSansMono-Regular.ttf',
-  '../../../../extras/fonts/FantasqueSansMono-Italic.ttf',
-  '../../../../extras/fonts/FantasqueSansMono-Bold.ttf',
-  '../../../../extras/fonts/FantasqueSansMono-BoldItalic.ttf',
+  '../../../../data/fonts/FantasqueSansMono-Regular.ttf',
+  '../../../../data/fonts/FantasqueSansMono-Italic.ttf',
+  '../../../../data/fonts/FantasqueSansMono-Bold.ttf',
+  '../../../../data/fonts/FantasqueSansMono-BoldItalic.ttf',
 )
 font_table_inc = include_directories('.')
 font_table_h = custom_target('font_table.h',
@@ -26,7 +26,7 @@ font_table_h = custom_target('font_table.h',
 # understood by glfwSetWindowIcon().
 rsvg_convert = find_program('rsvg-convert')
 window_icon_png = custom_target('wordprocess-window-icon.png',
-  input: meson.project_source_root() / 'extras/wordprocess.svg',
+  input: meson.project_source_root() / 'data/icons/wordprocess.svg',
   output: 'wordprocess-window-icon.png',
   command: [rsvg_convert, '--width', '128', '--height', '128',
             '--output', '@OUTPUT@', '@INPUT@'],
