@@ -72,6 +72,17 @@ static Page* page_create(void)
     glBindTexture(GL_TEXTURE_2D, page->texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    /* Allocate storage once; individual glyphs are uploaded incrementally
+     * via glTexSubImage2D as they're first rendered (see renderTtfChar). */
+    glTexImage2D(GL_TEXTURE_2D,
+        0,
+        GL_ALPHA,
+        PAGE_WIDTH,
+        PAGE_HEIGHT,
+        0,
+        GL_ALPHA,
+        GL_UNSIGNED_BYTE,
+        NULL);
 
     stbtt_PackBegin(&page->ctx,
         &page->textureData[0],
@@ -256,16 +267,29 @@ static void renderTtfChar(uni_t c, uint8_t attrs, float x, float y)
         /* Now we have a valid rendered glyph, but we need to update the
          * texture. */
 
+        /* Only the newly-rendered glyph's rectangle changed; re-uploading the
+         * whole page here (as opposed to glTexSubImage2D-ing just that rect)
+         * used to mean every previously-unseen character in a document -- one
+         * full PAGE_WIDTH*PAGE_HEIGHT upload each -- which is needless GPU
+         * traffic and, on slower/software GL drivers, a real source of
+         * multi-second lag the first time a glyph-rich document is opened. */
+        int gx = cd->packData.x0;
+        int gy = cd->packData.y0;
+        int gw = cd->packData.x1 - cd->packData.x0;
+        int gh = cd->packData.y1 - cd->packData.y0;
         glBindTexture(GL_TEXTURE_2D, page->texture);
-        glTexImage2D(GL_TEXTURE_2D,
-            0,
-            GL_ALPHA,
-            PAGE_WIDTH,
-            PAGE_HEIGHT,
-            0,
-            GL_ALPHA,
-            GL_UNSIGNED_BYTE,
-            &page->textureData[0]);
+        if ((gw > 0) && (gh > 0))
+        {
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, PAGE_WIDTH);
+            glTexSubImage2D(GL_TEXTURE_2D,
+                0,
+                gx, gy,
+                gw, gh,
+                GL_ALPHA,
+                GL_UNSIGNED_BYTE,
+                &page->textureData[gy * PAGE_WIDTH + gx]);
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        }
     }
 
     stbtt_aligned_quad q;
