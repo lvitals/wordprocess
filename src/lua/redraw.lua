@@ -857,10 +857,11 @@ function RedrawScreen()
 		local bot_marker_y = has_terminators and (status_y - 2) or nil
 		local max_y = has_terminators and (status_y - 3) or (status_y - 1)
 
-		if has_terminators and bot_marker_y and (bot_marker_y >= min_y) then
+		local paper_bottom = bot_marker_y or max_y
+		if paper_bottom >= min_y then
 			SetColour(Palette.Paper, Palette.Paper)
 			SetNormal()
-			ClearArea(lm, min_y, rm, bot_marker_y)
+			ClearArea(lm, min_y, rm, paper_bottom)
 		end
 
 		local cp, cw, co = currentDocument.cp, currentDocument.cw, currentDocument.co
