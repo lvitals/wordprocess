@@ -98,6 +98,22 @@ function WantFullStopSpaces()
 end
 
 -----------------------------------------------------------------------------
+-- The margin display mode (Style -> Margin) new documents should start
+-- with -- i.e. whatever was last chosen, so it carries over to the next
+-- document set or blank document instead of always resetting to "no
+-- margin".
+
+function GetDefaultMarginMode()
+	local settings = GlobalSettings.lookandfeel
+	return (settings and settings.marginmode) or 1
+end
+
+function SetDefaultMarginMode(mode)
+	GlobalSettings.lookandfeel.marginmode = mode
+	SaveGlobalSettings()
+end
+
+-----------------------------------------------------------------------------
 -- Get the scroll mode.
 
 function GetScrollMode()
@@ -146,6 +162,7 @@ do
 				palette = "Dark",
 				scrollmode = "Fixed",
 				fullstopspaces = false,
+				marginmode = 1,
 			}
 		)
 		SetTheme(GlobalSettings.lookandfeel.palette)

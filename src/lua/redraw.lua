@@ -189,6 +189,7 @@ local function drawmargin(y, pn, p)
 			SetColour(Palette.StyleFG, Palette.Desktop)
 			SetDim()
 			RAlignInField(0, y, papermargin - 1, s)
+			SetNormal()
 		end
 	end
 
@@ -768,6 +769,7 @@ local function redrawtextbuffer()
 				SetColour(Palette.StyleFG, Palette.Desktop)
 				SetDim()
 				RAlignInField(0, y, papermargin - 1, label)
+				SetNormal()
 			end
 		end
 

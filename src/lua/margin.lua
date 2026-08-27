@@ -22,19 +22,51 @@ local no_margin_controller=
 	end
 }
 
+local function measureStyleNameMarginWidth()
+	local m = 0
+
+	for _, style in pairs(documentStyles) do
+		local mm = GetStringWidth(style.name)
+		if (mm > m) then
+			m = mm
+		end
+	end
+
+	return m
+end
+
+local function measureParagraphNumberMarginWidth(document)
+	if document:usesTextBuffer() then
+		local line = document:getLineAtPosition()
+		return #tostring(line or 1)
+	end
+	return int(math.log(math.max(#document, 1), 10)) + 1
+end
+
+--- Computes the margin width a given margin mode needs for a document,
+-- without any of the side effects (announcements, event listeners) that
+-- attaching that mode as the active controller has. Used to give a freshly
+-- created document the right-sized margin for its starting mode, before it
+-- ever goes through SetMarginMode.
+--
+-- @param mode               the margin mode
+-- @param document           the document the mode will apply to
+
+function GetMarginWidthForMode(mode, document)
+	if mode == 2 then
+		return measureStyleNameMarginWidth()
+	elseif mode == 3 then
+		return measureParagraphNumberMarginWidth(document)
+	elseif mode == 4 then
+		return 3
+	end
+	return 0
+end
+
 local style_name_controller=
 {
 	attach = function(self)
-		local m = 0
-
-		for _, style in pairs(documentStyles) do
-			local mm = GetStringWidth(style.name)
-			if (mm > m) then
-				m = mm
-			end
-		end
-
-		currentDocument.margin = m
+		currentDocument.margin = measureStyleNameMarginWidth()
 		NonmodalMessage("Margin now displays paragraph styles.")
 	end,
 
@@ -59,13 +91,7 @@ local paragraph_number_controller=
 				return
 			end
 
-			local nm
-			if currentDocument:usesTextBuffer() then
-				local line = currentDocument:getLineAtPosition()
-				nm = #tostring(line or 1)
-			else
-				nm = int(math.log(math.max(#currentDocument, 1), 10)) + 1
-			end
+			local nm = measureParagraphNumberMarginWidth(currentDocument)
 			if nm ~= currentDocument.margin then
 				currentDocument.margin = nm
 				ResizeScreen()
@@ -137,10 +163,31 @@ function SetMarginMode(mode)
 	-- Margin presentation changes metadata, not content or physical layout.
 	documentSet:touch(true)
 	ResizeScreen()
+
+	-- Remember this as the style to start new documents with, so it isn't
+	-- lost the moment a new document set or blank document is created.
+	SetDefaultMarginMode(mode)
 end
 
 function Cmd.SetViewMode(mode)
 	SetMarginMode(mode)
 	QueueRedraw()
 	return true
+end
+
+-- Margin display is an editing preference, not document content: whatever a
+-- loaded file happens to carry as viewmode/margin (if anything -- older
+-- files predate these fields entirely) must not override the style the user
+-- has chosen to work in. Every document that comes in from a load is
+-- reset to the persisted default the same way a freshly created one is.
+do
+	local function cb()
+		local mode = GetDefaultMarginMode()
+		for _, document in ipairs(documentSet:getDocumentList()) do
+			document.viewmode = mode
+			document.margin = GetMarginWidthForMode(mode, document)
+		end
+	end
+
+	AddEventListener("DocumentLoaded", cb)
 end

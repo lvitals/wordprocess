@@ -829,10 +829,11 @@ function UpdateDocumentStyles()
 end
 
 function CreateDocument()
+	local viewmode = GetDefaultMarginMode()
 	local d =
 	{
 		_wrapwidth = 0,
-		viewmode = 1,
+		viewmode = viewmode,
 		margin = 0,
 		cp = 1,
 		cw = 1,
@@ -857,5 +858,6 @@ function CreateDocument()
 
 	local p = CreateParagraph("P", {""})
 	dd:appendParagraph(p)
+	dd.margin = GetMarginWidthForMode(viewmode, dd)
 	return dd
 end
