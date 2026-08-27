@@ -257,16 +257,12 @@ static void handle_mouse(double x, double y, bool b)
     if (wh > 0)
         y = y * fh / wh;
 
-    /* The grid is anchored to the bottom of the framebuffer (see dpy_sync),
-     * so row 0 doesn't necessarily start at y=0 -- there can be a leftover
-     * margin above it when fh isn't an exact multiple of fontHeight. Undo
-     * that same offset here, or clicks on the status bar (and everything
-     * else) would land one row off whenever such a margin exists. */
-    int yOffset = fh % fontHeight;
+    /* Rows are spaced by the framebuffer's exact share (fh / screenHeight),
+     * not fontHeight, so they tile it with no leftover margin at either
+     * edge (see dpy_sync) -- row 0 starts flush at y=0, and this must
+     * divide by the same pitch or clicks land on the wrong row. */
     int ix = x / fontWidth;
-    int iy = ((int)y - yOffset) / fontHeight;
-    if ((int)y < yOffset)
-        iy = -1;
+    int iy = (screenHeight > 0) ? (int)(y / ((float)fh / screenHeight)) : -1;
     static int oldix = -1;
     static int oldiy = -1;
     static bool oldb = false;
@@ -431,47 +427,27 @@ void dpy_sync(void)
     else
     {
         /* screenHeight is floor(h/fontHeight): h generally isn't an exact
-         * multiple of fontHeight, so there are 0..fontHeight-1 leftover
-         * pixels that don't fit a whole row. Anchoring row 0 at y=0 would
-         * push that leftover below the last row (the status bar), whose
-         * apparent thickness would then change with every resize as the
-         * leftover grows and shrinks. Anchoring to the bottom instead
-         * keeps every row, including the status bar, at exactly
-         * fontHeight regardless of window size -- the leftover always
-         * lands above row 0, in the ordinary document background, where
-         * a few pixels of slack isn't a visible "bar" changing size. */
-        int yOffset = h - screenHeight * fontHeight;
+         * multiple of fontHeight, so fontHeight-spaced rows can't tile it
+         * without either leaving leftover pixels at an edge or clipping the
+         * last row. Leftover reserved as blank space at an edge reads as a
+         * gap next to whatever's drawn there -- most noticeably above the
+         * terminator ruler's tick marks, unmistakably "content" unlike a
+         * page of plain text. Spacing rows by the framebuffer's own exact
+         * share (h / screenHeight) instead makes them tile it perfectly --
+         * screenHeight rows, top to bottom, no leftover pixels anywhere --
+         * at the cost of a sub-pixel difference from fontHeight per row
+         * that's imperceptible at any real font size. */
+        float rowPitch = (float)h / screenHeight;
 
         const cell_t* p = &screen[0];
         for (int y = 0; y < screenHeight; y++)
         {
-            float sy = yOffset + y * fontHeight;
+            float sy = y * rowPitch;
             for (int x = 0; x < screenWidth; x++)
             {
                 float sx = x * fontWidth;
-                printChar(p, sx, sy);
+                printChar(p, sx, sy, rowPitch);
                 p++;
-            }
-        }
-
-        /* yOffset pixels above row 0 aren't part of any cell, so they'd
-         * otherwise stay whatever glClearColor() left them -- a fixed
-         * black, regardless of theme. That's invisible against the Dark
-         * theme's near-black desktop but shows up as a stray black line
-         * across the top of the window against the Light theme's paler
-         * one. Paint it using row 0's own per-column background instead,
-         * so it reads as more of the same desktop rather than a seam. */
-        if (yOffset > 0)
-        {
-            const cell_t* firstRow = &screen[0];
-            glDisable(GL_BLEND);
-            for (int x = 0; x < screenWidth; x++)
-            {
-                float sx = x * fontWidth;
-                const GLfloat* bg = (const GLfloat*)&firstRow[x].bg;
-                const GLfloat* fg = (const GLfloat*)&firstRow[x].fg;
-                glColor3fv((firstRow[x].attr & DPY_REVERSE) ? fg : bg);
-                glRectf(sx, 0, sx + fontWidth, yOffset);
             }
         }
 
@@ -480,14 +456,14 @@ void dpy_sync(void)
             int x = cursorx * fontWidth - 1;
             if (x < 0)
                 x = 0;
-            int y = yOffset + cursory * fontHeight;
+            float y = cursory * rowPitch;
 
             glColor3f(1.0f, 1.0f, 1.0f);
             glLogicOp(GL_XOR);
             glDisable(GL_BLEND);
             glDisable(GL_POLYGON_SMOOTH);
             glEnable(GL_COLOR_LOGIC_OP);
-            glRecti(x, y, x + fontWidth, y + fontHeight);
+            glRectf(x, y, x + fontWidth, y + rowPitch);
             glLogicOp(GL_CLEAR);
             glDisable(GL_COLOR_LOGIC_OP);
         }

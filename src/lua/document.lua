@@ -590,14 +590,21 @@ end
 
 -- calculate space above this paragraph
 function Document.spaceAbove(self, pn)
-	local paragraph = self[pn]
 	local paragraphabove = self[pn - 1]
 
-	local sa = documentStyles[paragraph.style].above or 0 -- FIXME
-	local sb = 0
-	if paragraphabove then
-		sb = documentStyles[paragraphabove.style].below or 0 -- FIXME
+	-- Space above exists to separate a paragraph from whatever precedes it.
+	-- With nothing above the very first paragraph, there's nothing to
+	-- separate from, so no space is owed here -- otherwise it shows up as a
+	-- phantom blank row wherever the document start has a fixed reference
+	-- point to reveal it against, e.g. the ruler drawn above the document
+	-- when terminators are on.
+	if not paragraphabove then
+		return 0
 	end
+
+	local paragraph = self[pn]
+	local sa = documentStyles[paragraph.style].above or 0 -- FIXME
+	local sb = documentStyles[paragraphabove.style].below or 0 -- FIXME
 
 	if (sa > sb) then
 		return sa

@@ -30,7 +30,7 @@ extern int fontHeight;
 extern void loadFonts();
 extern void unloadFonts();
 extern void flushFontCache();
-extern void printChar(const cell_t* cell, float x, float y);
+extern void printChar(const cell_t* cell, float x, float y, float cellHeight);
 
 extern int get_ivar(const char* name);
 extern const char* get_svar(const char* name);

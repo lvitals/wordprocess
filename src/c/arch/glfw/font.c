@@ -310,7 +310,7 @@ static void renderTtfChar(uni_t c, uint8_t attrs, float x, float y)
     glEnd();
 }
 
-void printChar(const cell_t* cell, float x, float y)
+void printChar(const cell_t* cell, float x, float y, float cellHeight)
 {
     GLfloat* fg = (GLfloat*)&cell->fg;
     GLfloat* bg = (GLfloat*)&cell->bg;
@@ -323,11 +323,15 @@ void printChar(const cell_t* cell, float x, float y)
         fg = &nfg[0];
     }
 
-    /* Draw background. */
+    /* Draw background. cellHeight -- not fontHeight -- so that rows tile
+     * the framebuffer with no gap between them: the caller sizes it to the
+     * actual on-screen row pitch, which can differ from fontHeight by a
+     * sub-pixel amount when the framebuffer height isn't an exact multiple
+     * of it. */
 
     glDisable(GL_BLEND);
     glColor3fv((cell->attr & DPY_REVERSE) ? fg : bg);
-    glRectf(x, y, x + fontWidth, y + fontHeight);
+    glRectf(x, y, x + fontWidth, y + cellHeight);
 
     /* Draw foreground. */
 
@@ -421,19 +425,19 @@ void printChar(const cell_t* cell, float x, float y)
             glEnd();
             break;
 
-        case 0x2594: /* ▔ */
+        case 0x2594: /* ▔ upper one eighth block */
             glBegin(GL_POLYGON);
             glVertex2i(x, y + 0);
             glVertex2i(x + w, y + 0);
-            glVertex2i(x + w, y + 2);
-            glVertex2i(x, y + 2);
+            glVertex2i(x + w, y + h / 8);
+            glVertex2i(x, y + h / 8);
             glEnd();
             break;
 
-        case 0x2581: /* ▁ */
+        case 0x2581: /* ▁ lower one eighth block */
             glBegin(GL_POLYGON);
-            glVertex2i(x + w, y + h - 2);
-            glVertex2i(x, y + h - 2);
+            glVertex2i(x + w, y + h - h / 8);
+            glVertex2i(x, y + h - h / 8);
             glVertex2i(x, y + h);
             glVertex2i(x + w, y + h);
             glEnd();

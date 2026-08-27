@@ -22,13 +22,32 @@ local no_margin_controller=
 	end
 }
 
-local function measureStyleNameMarginWidth()
+-- Sized to the styles this document actually uses, not the widest name in
+-- documentStyles -- reserving room for every style that exists (e.g. "PRE",
+-- "RAW") regardless of whether the document ever uses them would waste
+-- columns on documents that only ever use short style names like "P".
+local function measureStyleNameMarginWidth(document)
 	local m = 0
 
-	for _, style in pairs(documentStyles) do
-		local mm = GetStringWidth(style.name)
-		if (mm > m) then
-			m = mm
+	if document:usesTextBuffer() then
+		local metadata = document:ensureDocumentIndex()
+		for _, span in ipairs(metadata and metadata.paragraphStyles or {}) do
+			local mm = GetStringWidth(span.style)
+			if (mm > m) then
+				m = mm
+			end
+		end
+		if (m == 0) then
+			-- No style spans recorded yet: match the style
+			-- largeParagraphStyleAt() falls back to for untagged text.
+			m = GetStringWidth(document:largeParagraphStyleAt(0))
+		end
+	else
+		for _, paragraph in ipairs(document) do
+			local mm = GetStringWidth(paragraph.style)
+			if (mm > m) then
+				m = mm
+			end
 		end
 	end
 
@@ -54,7 +73,7 @@ end
 
 function GetMarginWidthForMode(mode, document)
 	if mode == 2 then
-		return measureStyleNameMarginWidth()
+		return measureStyleNameMarginWidth(document)
 	elseif mode == 3 then
 		return measureParagraphNumberMarginWidth(document)
 	elseif mode == 4 then
@@ -66,8 +85,31 @@ end
 local style_name_controller=
 {
 	attach = function(self)
-		currentDocument.margin = measureStyleNameMarginWidth()
+		local cb = function()
+			-- See paragraph_number_controller's cb() below: this listener
+			-- stays registered past a document switch, so it must check it's
+			-- still the active controller for whatever document is current.
+			if marginControllers[currentDocument.viewmode] ~= self then
+				return
+			end
+
+			local m = measureStyleNameMarginWidth(currentDocument)
+			if m ~= currentDocument.margin then
+				currentDocument.margin = m
+				ResizeScreen()
+			end
+		end
+
+		self.token = AddEventListener("Changed", cb)
+		cb()
 		NonmodalMessage("Margin now displays paragraph styles.")
+	end,
+
+	detach = function(self)
+		if self.token then
+			RemoveEventListener(self.token)
+			self.token = nil
+		end
 	end,
 
 	getcontent = function(self, pn, paragraph)
