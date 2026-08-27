@@ -879,9 +879,37 @@ function RedrawScreen()
 			currentDocument._topp, currentDocument._topw,
 			cp, cw, co, max_y - min_y + 1)
 
+		-- Word indices increase monotonically through a paragraph in reading
+		-- order, and _topw is specifically the word the top line *starts*
+		-- on -- so this is a cheap, exact stand-in for "is the cursor's line
+		-- before the previous top line" (same condition rowoffsetfromtop
+		-- checks internally via getLineOfWord for the cp == topp case)
+		-- without paying for another line-number lookup.
+		local topp, topw = currentDocument._topp, currentDocument._topw
+		local cursor_before_top = topp and
+			((cp < topp) or (cp == topp and cw < topw))
+
 		local cy
 		if row then
 			cy = min_y + row
+		elseif cursor_before_top then
+			-- The cursor moved to a line before the previously-drawn top of
+			-- the viewport -- e.g. pressing Up out of the top row, whether
+			-- that crossed into an earlier paragraph or just an earlier
+			-- line of a paragraph that was already wrapped across several.
+			-- Anchor it to the new top row and let the forward fill below
+			-- reveal what comes after it. Falling through to the
+			-- paragraph-1 walk below would instead place the cursor
+			-- however far *it* thinks the cursor is from the start of the
+			-- document -- correct for scrolling past the end of the
+			-- viewport (where that distance pins to the bottom row
+			-- regardless) but not for this direction, where it can land
+			-- anywhere from the top row to the middle of the screen
+			-- depending on the cursor's absolute position in the document.
+			-- That's what turned "scroll up one line" into "jump up a
+			-- whole page" (and, same as that walk, this also sidesteps
+			-- ever having to scan from paragraph 1).
+			cy = min_y
 		else
 			-- Once the running total already exceeds the viewport, the
 			-- cursor is guaranteed to clamp to max_y below no matter how
