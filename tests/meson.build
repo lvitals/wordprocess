@@ -6,7 +6,8 @@
 wordprocess_tests = [
   'apply-markup', 'argument-parser', 'change-paragraph-style', 'clipboard',
   'compact-keyboard-navigation',
-  'delete-selection', 'empty-wordcount', 'escape-strings', 'export-to-html', 'export-to-latex',
+  'delete-selection', 'document-round-trip',
+  'empty-wordcount', 'escape-strings', 'export-to-html', 'export-to-latex',
   'export-to-markdown', 'export-to-opendocument', 'export-to-org',
   'export-to-text', 'export-to-troff', 'filesystem', 'find-and-replace',
   'fixed-mode-click-preserves-viewport',
@@ -18,6 +19,7 @@ wordprocess_tests = [
   'load-compatibility-05', 'load-compatibility-06', 'load-compatibility-07', 'load-compatibility-08', 'load-compatibility-10-crlf',
   'load-compatibility-09', 'load-failed', 'load-wordgrinder', 'lowlevelclipboard',
   'margin-centered-with-width-cap', 'margin-mode-persistence',
+  'margin-mode-follows-default-on-create',
   'move-while-selected',
   'numbered-lists', 'page-layout', 'page-navigation', 'parse-string-into-words', 'save-format-escaped-strings',
   'scrollbar', 'selection-shortcuts', 'simple-editing', 'smartquotes-selection', 'smartquotes-typing',
@@ -37,6 +39,7 @@ wordprocess_tests = [
   'weirdness-word-left-from-end-of-line',
   'weirdness-word-left-on-first-word-in-doc',
   'weirdness-word-right-to-last-word-in-doc', 'windows-installdir', 'word',
+  'wrapped-paragraph-scroll-up',
   'xpattern',
 ]
 
@@ -66,3 +69,7 @@ if valgrind_prog.found()
     )
   endforeach
 endif
+
+# Frontend smoke tests: below the wg.getscreensize() mock boundary the
+# tests above rely on -- see tests/frontend/meson.build.
+subdir('frontend')

@@ -56,6 +56,32 @@ export, page layout, settings, argument parsing, filesystem behaviour, and
 reported regressions. `tests/valgrind.sh` supports memory checking where
 Valgrind is available.
 
+Most of the above runs headless: a test overrides `wg.getscreensize()` and
+calls `ResizeScreen()`/`RedrawScreen()` directly, so viewport, wrapping, and
+layout logic (`src/lua/redraw.lua`) can be checked without a real terminal or
+window (see `fixed-mode-click-preserves-viewport.lua`, `page-navigation.lua`,
+`margin-centered-with-width-cap.lua`). That mock stops at the Lua/`wg`
+boundary, though: it cannot see a bug in translating a logical cell into an
+actual terminal escape sequence or GLFW pixel, because to that mock the cell
+is already correct. Recent regressions of exactly that kind (a hardcoded
+pixel height in the GLFW frontend, a stale window-size offset) motivated
+`tests/frontend/`, which spawns the real `wp` binary attached to a
+pseudo-terminal via a small test-only native helper (`ptysmoke`, built by
+`tests/frontend/meson.build`, never installed or linked into wp/xwp) and
+checks a few specific properties through it: the process survives startup,
+several resizes, and normal navigation without hanging or crashing; a resize
+never leaves a stale, out-of-bounds cursor-position escape sequence behind;
+and `TERM=linux` never emits a raw byte the console can't render. It
+deliberately does not parse VT100 state or compare screens byte for byte --
+that would be fragile to maintain for little extra signal. See
+`tests/frontend/wp-pty-smoke.lua` for the current checks and
+`tests/frontend/ptysmoke.c`'s header comment for the command protocol used to
+add more. There is no equivalent yet for the GLFW frontend (real window,
+OpenGL context, and framebuffer make that a larger undertaking); hardening
+sessions in the meantime rely on manual verification (resize, alternate font
+sizes, mouse, the ruler, and window sizes that don't align to the character
+grid).
+
 ## Adding features
 
 Prefer a Lua add-on plus event registration when a feature does not require a

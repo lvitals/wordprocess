@@ -17,10 +17,16 @@ if currentDocument.margin <= 0 then
 	error("expected margin mode 3 to reserve a nonzero margin width")
 end
 
--- Switching to a fresh document must not inherit docA's margin/viewmode,
--- neither immediately nor after the next "Changed" event (which is what
--- the leaked listener reacts to).
+-- Margin mode is a global editor preference (see
+-- margin-mode-follows-default-on-create.lua): a document created *after*
+-- SetMarginMode(3) is expected to start in mode 3 too, so that alone can't
+-- be used to tell "inherited the global default at creation time" apart
+-- from "the leaked listener stomped on it later". Isolate the listener-leak
+-- regression by giving docB a *different* mode explicitly, as if it were a
+-- document loaded from disk with its own saved viewmode.
 local docB = CreateDocument()
+docB.viewmode = 1
+docB.margin = 0
 documentSet:addDocument(docB, "docB")
 documentSet:setCurrent("docB")
 
