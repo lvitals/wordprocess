@@ -1,9 +1,6 @@
 # WordProcess
 
-WordProcess is a keyboard-focused word processor for structured long-form
-writing. It provides terminal and graphical frontends, document sets, styles,
-configurable page layouts, rulers and tab stops, margin annotations, autosave,
-and import/export support for common text and document formats.
+WordProcess is a WordStar-like, keyboard-focused word processor for structured long-form writing. It provides terminal and graphical frontends, document sets, styles, configurable page layouts, rulers and tab stops, margin annotations, autosave, and import/export support for common text and document formats.
 
 The native WordProcess document extension is `.wp`.
 
