@@ -14,6 +14,7 @@ configures the directory scanned for installed dictionaries; it does not rely
 on a language-ambiguous `words` alias.
 
 ```sh
+autoreconf -fi
 ./configure
 make
 make test

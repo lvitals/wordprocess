@@ -13,14 +13,17 @@ minizip, zlib, stb headers, ncursesw, and Lua 5.1 through 5.5. Building `xwp`
 also requires GLFW, OpenGL, and XCB.
 
 ```sh
+autoreconf -fi
 ./configure
 make
 make test
 sudo make install
 ```
 
-When changing `configure.ac` or `Makefile.am`, regenerate the build system with
-`autoreconf -fi` before running `configure`.
+The generated Autotools boilerplate is intentionally not versioned, so run
+`autoreconf -fi` after cloning and whenever `configure.ac` or `Makefile.am`
+changes. Calling `automake` directly is not sufficient because it does not
+generate `aclocal.m4`, `configure`, or `config.h.in`.
 Use `make valgrind` for the full memory-checking pass.
 
 Useful configuration options are:
