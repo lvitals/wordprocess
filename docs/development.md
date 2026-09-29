@@ -32,12 +32,12 @@ the selected frontend's event loop.
 
 ## Build system
 
-Meson generates an embedded Lua table with `tools/meson-multibin2c.c` and,
+Autotools generates an embedded Lua table with `tools/multibin2c.c` and,
 for `xwp`, font and icon sources. Build options are `xwp`, `app_version`, and
-`lua_version`, `dictionary_dir`, and `dictionary_path`. The build detects stb headers in `/usr/include/stb` or
+`lua-version`, `dictionary-dir`, `dictionary-path`, and `hyphenation-dir`. The build detects stb headers in `/usr/include/stb` or
 `/usr/local/include/stb`. The native format constant is currently 8.
 
-Spelling word lists are optional and are never link-time dependencies. Meson
+Spelling word lists are optional and are never link-time dependencies. Configure
 reports whether `dictionary_dir` and an optional `dictionary_path` exist. Each file
 must contain one complete word per line; Hunspell `.dic`/`.aff` files are not
 directly compatible and must first be expanded to a plain word list.
@@ -45,12 +45,15 @@ directly compatible and must first be expanded to a plain word list.
 Run the normal verification cycle with:
 
 ```sh
-meson setup builddir
-meson compile -C builddir
-meson test -C builddir --print-errorlogs
+autoreconf -fi
+./configure
+make
+make test
 ```
 
-The tests invoke Lua scenarios through the built executable and cover editing,
+`make check` is an alias-compatible Autotools entry point for the same suite;
+`make valgrind` (also available as `make check-valgrind`) runs it under
+Valgrind. The tests invoke Lua scenarios through the built executable and cover editing,
 navigation, styles, wrapping, clipboard, persistence compatibility, import and
 export, page layout, settings, argument parsing, filesystem behaviour, and
 reported regressions. `tests/valgrind.sh` supports memory checking where
@@ -67,7 +70,7 @@ is already correct. Recent regressions of exactly that kind (a hardcoded
 pixel height in the GLFW frontend, a stale window-size offset) motivated
 `tests/frontend/`, which spawns the real `wp` binary attached to a
 pseudo-terminal via a small test-only native helper (`ptysmoke`, built by
-`tests/frontend/meson.build`, never installed or linked into wp/xwp) and
+`Makefile.am`, never installed or linked into wp/xwp) and
 checks a few specific properties through it: the process survives startup,
 several resizes, and normal navigation without hanging or crashing; a resize
 never leaves a stale, out-of-bounds cursor-position escape sequence behind;
@@ -102,7 +105,7 @@ an internal native file as editable text.
 
 ## Packaging
 
-Meson installs both enabled executables and desktop integration resources.
+Autotools installs both enabled executables and desktop integration resources.
 Distributors should set `app_version`, install the manual pages from `man/`,
 and may disable `xwp` for terminal-only packages. Preserve `NOTICE`, the main
 MIT licence, third-party licences, bundled dictionary notices, and the project

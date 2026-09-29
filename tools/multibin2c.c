@@ -1,8 +1,8 @@
-// Meson-friendly equivalent of the old `ab` build's tools/multibin2c.sh +
+// Build-tool-independent equivalent of the old `ab` build's multibin2c tool,
 // build/_objectify.py, combined into one self-contained tool (no
-// cwd-relative references, so it works from any Meson custom_target cwd).
+// with no cwd-relative references, so it also supports out-of-tree builds.
 //
-// Usage: meson-multibin2c [--root DIR] <symbol> <file> ...
+// Usage: multibin2c [--root DIR] <symbol> <file> ...
 // Emits a `const FileDescriptor <symbol>[] = {...}` table to stdout,
 // matching the FileDescriptor{ const char* data; size_t size; const char*
 // name; } struct in src/c/globals.h (a plain C99 aggregate). Each file's

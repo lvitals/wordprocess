@@ -6,42 +6,42 @@ The native WordProcess document extension is `.wp`.
 
 ## Build
 
-WordProcess uses Meson and Ninja. Required development libraries include a
+WordProcess uses Autotools. Required development libraries include a
 system Lua implementation, ncursesw, libcmark, minizip, zlib, and stb headers.
 The graphical frontend additionally requires GLFW, OpenGL, and XCB.
-Spellchecking uses selectable plain-text word lists, one word per line. Meson
+Spellchecking uses selectable plain-text word lists, one word per line. Configure
 configures the directory scanned for installed dictionaries; it does not rely
 on a language-ambiguous `words` alias.
 
 ```sh
-meson setup builddir
-meson compile -C builddir
-meson test -C builddir
+./configure
+make
+make test
 ```
 
 Select another dictionaries directory at build time with, for example:
 
 ```sh
-meson setup builddir -Ddictionary_dir=/path/to/dictionaries
+./configure --with-dictionary-dir=/path/to/dictionaries
 ```
 
 Distributors can set the version shown by the program and generated manual pages without editing source files:
 
 ```sh
-meson setup builddir -Dapp_version=1.0.1
+./configure --with-app-version=1.0.1
 ```
 
 To build only the terminal frontend:
 
 ```sh
-meson setup builddir -Dxwp=false
+./configure --disable-xwp
 ```
 
 ## Run
 
 ```sh
-builddir/src/c/arch/ncurses/wp
-builddir/src/c/arch/glfw/xwp
+./wp
+./xwp
 ```
 
 Open a document by supplying its path, for example:
@@ -52,6 +52,10 @@ wp manuscript.wp
 
 Use `wp --help` for command-line conversion and scripting options.
 Global configuration is stored in `~/.wordprocess/`.
+
+Run the same functional suite under Valgrind with `make valgrind`. The standard
+Autotools spelling `make check` and the compatibility target
+`make check-valgrind` remain available.
 
 ## Documentation
 

@@ -9,7 +9,7 @@
     <glob pattern="*.wp" weight="60"/>
     <glob pattern="*.wg"/>
     <!-- Used by icon themes that don't inherit from hicolor (where the real
-         application-x-wordprocess icon lives, installed by data/meson.build)
+         application-x-wordprocess icon lives, installed by Makefile.am)
          and so wouldn't otherwise find any icon for this mimetype at all. -->
     <generic-icon name="x-office-document"/>
   </mime-type>

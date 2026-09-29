@@ -1,13 +1,12 @@
 // Refreshes the icon theme, desktop file, and shared-mime-info caches after
-// `meson install`, so the freshly installed .desktop entry, its icon, and
+// `make install`, so the freshly installed .desktop entry, its icon, and
 // the *.wp/*.wg file association actually show up instead of waiting for
 // something else to invalidate those caches. Without the mime cache refresh
 // specifically, wordprocess.xml sits in mime/packages unused and *.wp keeps
 // resolving to whatever other package's glob already claims it (e.g.
 // shared-mime-info's own application/vnd.wordperfect). Run via
-// meson.add_install_script() in data/meson.build, which only wires this up
-// when the underlying tools are present on the system (they're optional,
-// not build dependencies).
+// Makefile.am invokes this helper from install-data-hook. The underlying
+// cache tools are optional, not build dependencies.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -46,14 +45,8 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  const char *destdir_prefix = getenv("MESON_INSTALL_DESTDIR_PREFIX");
-  if (!destdir_prefix) destdir_prefix = "";
-
-  char datadir[4096];
-  snprintf(datadir, sizeof datadir, "%s/%s", destdir_prefix, argv[1]);
-
-  run_if_present("gtk-update-icon-cache", "icons/hicolor", "-qtf", datadir);
-  run_if_present("update-desktop-database", "applications", "-q", datadir);
-  run_if_present("update-mime-database", "mime", NULL, datadir);
+  run_if_present("gtk-update-icon-cache", "icons/hicolor", "-qtf", argv[1]);
+  run_if_present("update-desktop-database", "applications", "-q", argv[1]);
+  run_if_present("update-mime-database", "mime", NULL, argv[1]);
   return 0;
 }

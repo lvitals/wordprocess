@@ -64,12 +64,12 @@ dictionaries larger than 4 GiB on platforms with 64-bit file offsets.
 Choose the generated file from **Global settings → Load new system
 dictionary**. This explicit selection is stored as an editor preference.
 
-To configure where installed lists are discovered, configure Meson before compiling:
+To configure where installed lists are discovered, run `configure` before compiling:
 
 ```sh
-meson configure builddir -Ddictionary_dir=/path/to/dictionaries
-meson compile -C builddir
+./configure --with-dictionary-dir=/path/to/dictionaries
+make
 ```
 
-Use `-Ddictionary_path=/path/to/word-list.txt` only when one list should be
+Use `--with-dictionary-path=/path/to/word-list.txt` only when one list should be
 selected initially. Explicit selections in the editor are preserved.

@@ -8,26 +8,30 @@ named documents.
 
 ## Build and install
 
-The build requires Meson, Ninja, a C compiler, Python 3, pkg-config, libcmark,
+The build requires Autoconf, Automake, a C compiler, pkg-config, libcmark,
 minizip, zlib, stb headers, ncursesw, and Lua 5.1 through 5.5. Building `xwp`
 also requires GLFW, OpenGL, and XCB.
 
 ```sh
-meson setup builddir
-meson compile -C builddir
-meson test -C builddir
-meson install -C builddir
+./configure
+make
+make test
+sudo make install
 ```
+
+When changing `configure.ac` or `Makefile.am`, regenerate the build system with
+`autoreconf -fi` before running `configure`.
+Use `make valgrind` for the full memory-checking pass.
 
 Useful configuration options are:
 
 ```sh
-meson setup builddir -Dxwp=false                 # terminal frontend only
-meson setup builddir -Dlua_version=5.4           # select a Lua ABI
-meson setup builddir -Dapp_version=1.0.1         # reported version
+./configure --disable-xwp                         # terminal frontend only
+./configure --with-lua-version=5.4                # select a Lua ABI
+./configure --with-app-version=1.0.1              # reported version
 ```
 
-When `lua_version=auto`, the build searches from Lua 5.5 down to 5.1. The
+When `--with-lua-version=auto`, the build searches from Lua 5.5 down to 5.1. The
 project is written in GNU C99 and embeds its Lua sources; `xwp` also embeds its
 four default Fantasque Sans Mono fonts and application icon.
 

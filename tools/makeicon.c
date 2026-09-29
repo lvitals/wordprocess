@@ -1,5 +1,5 @@
 // Rasterizes the already-128x128 window icon PNG (produced by rsvg-convert
-// in src/c/arch/glfw/meson.build) into raw RGBA pixel data and emits it as
+// by the build system) into raw RGBA pixel data and emits it as
 // a `const unsigned char icon_data[]` C array, for glfwSetWindowIcon() (see
 // src/c/arch/glfw/main.c). Tries whichever of ImageMagick's magick/convert
 // or ffmpeg is available on PATH, in that order.

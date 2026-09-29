@@ -21,7 +21,7 @@
  *   WAIT_EXIT <ms>                     -- 1 if the child exits within <ms>
  *   KILL                               -- SIGKILL the child if still alive
  *
- * Not installed; not linked into wp/xwp. Built only for `meson test`.
+ * Not installed; not linked into wp/xwp. Built only for `make check`.
  */
 
 #define _GNU_SOURCE

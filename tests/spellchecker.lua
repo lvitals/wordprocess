@@ -13,7 +13,7 @@ AssertTableEquals({
 	discoveryDir.."/words",
 }, DiscoverSystemDictionaries(discoveryDir))
 
--- Meson's dictionary_path remains the default across upgrades, while a path
+-- configure's dictionary path remains the default across upgrades, while a path
 -- explicitly selected in the editor remains authoritative.
 GlobalSettings.systemdictionary = {filename="obsolete-default", custom=false}
 FireEvent("RegisterAddons")
